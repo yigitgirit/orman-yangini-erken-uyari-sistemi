@@ -2,7 +2,7 @@
   "name": "@pyros/sensor-sim",
   "version": "0.1.0",
   "private": true,
-  "description": "Layer 1: 8-node UDP sensor simulator (digital twin)",
+  "description": "Layer 1: 49-node UDP sensor simulator (digital twin)",
   "type": "module",
   "scripts": {
     "dev": "node --watch src/index.ts",
