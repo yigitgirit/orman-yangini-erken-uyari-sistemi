@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@pyros/shared": "workspace:*",
     "@radix-ui/react-dialog": "^1.1.6",
     "@radix-ui/react-hover-card": "^1.2.1",
     "@radix-ui/react-progress": "^1.2.1",
@@ -31,7 +32,8 @@
     "recharts": "^2.15.1",
     "sonner": "^2.0.8",
     "tailwind-merge": "^3.0.2",
-    "vaul": "^1.1.2"
+    "vaul": "^1.1.2",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",

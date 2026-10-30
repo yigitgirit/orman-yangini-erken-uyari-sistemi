@@ -1,3 +1,4 @@
+import type { NodeRisk, SensorNode, TelemetryMessage } from "@pyros/shared";
 import {
   Activity,
   AlertTriangle,
@@ -27,34 +28,42 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { SensorStation, TelemetryReading } from "../../types/simulation";
 
 interface TelemetryInspectorProps {
-  station: SensorStation | null;
-  reading: TelemetryReading | null;
-  history: TelemetryReading[];
+  station: SensorNode | null;
+  telemetry: TelemetryMessage | null;
+  risk: NodeRisk | null;
+  history: TelemetryMessage[];
   isOpen: boolean;
   onClose: () => void;
 }
 
 export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
   station,
-  reading,
+  telemetry,
+  risk,
   history,
   isOpen,
   onClose,
 }) => {
   // Çıkış animasyonu sırasında DOM'un anında unmount olmasını engellemek için son referansı sakla
-  const lastStationRef = useRef<SensorStation | null>(station);
-  const lastReadingRef = useRef<TelemetryReading | null>(reading);
+  const lastStationRef = useRef<SensorNode | null>(station);
+  const lastTelemetryRef = useRef<TelemetryMessage | null>(telemetry);
+  const lastRiskRef = useRef<NodeRisk | null>(risk);
 
   if (station) lastStationRef.current = station;
-  if (reading) lastReadingRef.current = reading;
+  if (telemetry) lastTelemetryRef.current = telemetry;
+  if (risk) lastRiskRef.current = risk;
 
   const currentStation = station ?? lastStationRef.current;
-  const currentReading = reading ?? lastReadingRef.current;
+  const currentTelemetry = telemetry ?? lastTelemetryRef.current;
+  const currentRisk = risk ?? lastRiskRef.current;
 
-  if (!currentStation || !currentReading) return null;
+  if (!currentStation || !currentTelemetry) return null;
+
+  const isFire = currentRisk?.level === "red";
+  const isSmoldering = currentRisk?.level === "yellow";
+  const riskScore = currentRisk?.score ?? 0;
 
   return (
     <Drawer open={isOpen} onOpenChange={(open) => !open && onClose()} direction="right">
@@ -67,7 +76,7 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
               <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider font-mono">
                 İSTASYON #{currentStation.id}
               </span>
-              {currentStation.isHardware && (
+              {currentStation.source === "wokwi" && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-normal bg-zinc-900 text-zinc-300 border border-zinc-800">
                   <Cpu className="h-3 w-3 text-sky-400" />
                   Wokwi ESP32
@@ -77,26 +86,24 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
 
             <span
               className={`inline-flex items-center gap-1.5 text-xs font-medium ${
-                currentReading.riskLevel === "fire"
-                  ? "text-red-400"
-                  : currentReading.riskLevel === "smoldering"
-                    ? "text-amber-400"
-                    : "text-emerald-400"
+                isFire ? "text-red-400" : isSmoldering ? "text-amber-400" : "text-emerald-400"
               }`}
             >
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
-                  currentReading.riskLevel === "fire"
+                  isFire
                     ? "bg-red-400 animate-pulse"
-                    : currentReading.riskLevel === "smoldering"
+                    : isSmoldering
                       ? "bg-amber-400 animate-pulse"
                       : "bg-emerald-400"
                 }`}
               />
-              {currentReading.riskLevel === "fire"
+              {isFire
                 ? "Aktif Yangın"
-                : currentReading.riskLevel === "smoldering"
-                  ? "Tütme Riski"
+                : isSmoldering
+                  ? currentRisk?.stage === "pyrolysis"
+                    ? "Piroliz Anomalisi"
+                    : "Tütme Riski"
                   : "Stabil"}
             </span>
           </div>
@@ -106,7 +113,7 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
             {currentStation.name}
           </DrawerTitle>
 
-          {/* 3. Satır: Koordinat ve Rakım Bilgileri */}
+          {/* 3. Satır: Koordinat Bilgileri */}
           <DrawerDescription className="text-xs text-zinc-400 flex items-center gap-2 pt-0.5">
             <span className="font-mono text-zinc-300">
               {currentStation.lat.toFixed(4)}° N, {currentStation.lng.toFixed(4)}° E
@@ -114,7 +121,7 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
             <span className="text-zinc-600">·</span>
             <span className="flex items-center gap-1 text-zinc-300 font-medium">
               <Mountain className="h-3.5 w-3.5 text-zinc-500" />
-              {currentStation.elevation} m Rakım
+              Marmaris Sektörü
             </span>
           </DrawerDescription>
 
@@ -127,7 +134,7 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
         {/* Tab Menüsü & İçerik Alanı */}
         <div className="flex-1 overflow-hidden flex flex-col bg-zinc-950">
           <Tabs defaultValue="telemetry" className="flex-1 flex flex-col overflow-hidden">
-            {/* Segmented Control: Kusursuz Boşluk & Çerçeveli Ayırıcı */}
+            {/* Segmented Control */}
             <div className="px-4 pb-3 pt-1 border-b border-zinc-800/80 bg-zinc-950 shrink-0">
               <TabsList className="grid grid-cols-3 gap-1 w-full bg-zinc-900/90 border border-zinc-800/80 h-10 p-1 rounded-xl">
                 <TabsTrigger
@@ -157,7 +164,7 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
             {/* TAB 1: Canlı Telemetri */}
             <TabsContent
               value="telemetry"
-              className="flex-1 overflow-y-auto px-4 pt-3.5 pb-4 space-y-3 custom-scrollbar mt-0 focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 [--tw-ring-shadow:none!important] [--tw-ring-offset-shadow:none!important]"
+              className="flex-1 overflow-y-auto px-4 pt-3.5 pb-4 space-y-3 custom-scrollbar mt-0 focus:outline-none focus-visible:outline-none focus:ring-0"
             >
               {/* Yangın & Anomali Risk Skoru Kartı */}
               <div className="p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800/80 space-y-2 hover:border-zinc-700/80 transition-colors">
@@ -165,26 +172,26 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
                   <span className="font-medium text-zinc-400">Yangın & Anomali Risk Skoru</span>
                   <span
                     className={`font-mono font-bold text-sm ${
-                      currentReading.riskScore > 70
+                      riskScore > 70
                         ? "text-red-400"
-                        : currentReading.riskScore > 30
+                        : riskScore > 30
                           ? "text-amber-400"
                           : "text-emerald-400"
                     }`}
                   >
-                    {currentReading.riskScore} / 100
+                    {riskScore} / 100
                   </span>
                 </div>
                 <div className="w-full bg-zinc-950 h-1.5 rounded-full overflow-hidden border border-zinc-800/80">
                   <div
                     className={`h-full transition-all duration-500 rounded-full ${
-                      currentReading.riskScore > 70
+                      riskScore > 70
                         ? "bg-red-500"
-                        : currentReading.riskScore > 30
+                        : riskScore > 30
                           ? "bg-amber-500"
                           : "bg-emerald-500"
                     }`}
-                    style={{ width: `${Math.max(4, currentReading.riskScore)}%` }}
+                    style={{ width: `${Math.max(4, riskScore)}%` }}
                   />
                 </div>
               </div>
@@ -198,24 +205,25 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
                       <Thermometer className="h-3.5 w-3.5 text-rose-400" />
                       Sıcaklık
                     </span>
-                    {currentReading.tempRate !== 0 && (
-                      <span
-                        className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-medium ${
-                          currentReading.tempRate > 0
-                            ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                            : "bg-zinc-800 text-zinc-400"
-                        }`}
-                      >
-                        {currentReading.tempRate > 0
-                          ? `+${currentReading.tempRate}`
-                          : currentReading.tempRate}
-                        °/dk
-                      </span>
-                    )}
+                    {currentRisk?.rate.temperature !== undefined &&
+                      currentRisk.rate.temperature !== 0 && (
+                        <span
+                          className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-medium ${
+                            currentRisk.rate.temperature > 0
+                              ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                              : "bg-zinc-800 text-zinc-400"
+                          }`}
+                        >
+                          {currentRisk.rate.temperature > 0
+                            ? `+${currentRisk.rate.temperature.toFixed(1)}`
+                            : currentRisk.rate.temperature.toFixed(1)}
+                          °/dk
+                        </span>
+                      )}
                   </div>
                   <div className="mt-2 flex items-baseline gap-1">
                     <span className="text-2xl font-bold font-mono text-zinc-100 tracking-tight">
-                      {currentReading.temperature}
+                      {currentTelemetry.temperature.toFixed(1)}
                     </span>
                     <span className="text-xs font-normal text-zinc-400">°C</span>
                   </div>
@@ -228,24 +236,24 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
                       <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
                       CO Gazı
                     </span>
-                    {currentReading.coRate !== 0 && (
+                    {currentRisk?.rate.co !== undefined && currentRisk.rate.co !== 0 && (
                       <span
                         className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-medium ${
-                          currentReading.coRate > 0
+                          currentRisk.rate.co > 0
                             ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
                             : "bg-zinc-800 text-zinc-400"
                         }`}
                       >
-                        {currentReading.coRate > 0
-                          ? `+${currentReading.coRate}`
-                          : currentReading.coRate}{" "}
+                        {currentRisk.rate.co > 0
+                          ? `+${currentRisk.rate.co.toFixed(1)}`
+                          : currentRisk.rate.co.toFixed(1)}{" "}
                         ppm/dk
                       </span>
                     )}
                   </div>
                   <div className="mt-2 flex items-baseline gap-1">
                     <span className="text-2xl font-bold font-mono text-zinc-100 tracking-tight">
-                      {currentReading.co}
+                      {currentTelemetry.co.toFixed(1)}
                     </span>
                     <span className="text-xs font-normal text-zinc-400">ppm</span>
                   </div>
@@ -261,24 +269,24 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
                   </div>
                   <div className="mt-2 flex items-baseline gap-1">
                     <span className="text-2xl font-bold font-mono text-zinc-100 tracking-tight">
-                      %{currentReading.humidity}
+                      %{Math.round(currentTelemetry.humidity)}
                     </span>
                   </div>
                 </div>
 
-                {/* AQI İndeksi */}
+                {/* CO2 Seviyesi */}
                 <div className="p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800/80 hover:border-zinc-700/80 transition-colors">
                   <div className="flex items-center justify-between text-xs font-medium text-zinc-400">
                     <span className="flex items-center gap-1.5 text-zinc-300">
                       <CloudFog className="h-3.5 w-3.5 text-indigo-400" />
-                      Hava Kalitesi
+                      Karbondioksit
                     </span>
                   </div>
                   <div className="mt-2 flex items-baseline gap-1">
                     <span className="text-2xl font-bold font-mono text-zinc-100 tracking-tight">
-                      {currentReading.aqi}
+                      {Math.round(currentTelemetry.co2)}
                     </span>
-                    <span className="text-xs font-normal text-zinc-400">/ 500 AQI</span>
+                    <span className="text-xs font-normal text-zinc-400">ppm</span>
                   </div>
                 </div>
               </div>
@@ -291,18 +299,24 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
                     Yerel Rüzgâr
                   </span>
                   <span className="text-xs text-zinc-400 font-mono">
-                    {currentReading.windDirection}° Azimut
+                    {currentTelemetry.windDirection !== null
+                      ? `${Math.round(currentTelemetry.windDirection)}° Azimut`
+                      : "İnterpole"}
                   </span>
                 </div>
                 <div className="flex items-baseline justify-between pt-1">
                   <div className="flex items-baseline gap-1">
                     <span className="text-2xl font-bold font-mono text-zinc-100">
-                      {currentReading.windSpeed}
+                      {currentTelemetry.windSpeed !== null
+                        ? currentTelemetry.windSpeed.toFixed(1)
+                        : "3.5"}
                     </span>
                     <span className="text-xs font-normal text-zinc-400">m/s</span>
                   </div>
                   <span className="text-xs text-zinc-300 font-medium">
-                    {getCompass(currentReading.windDirection)} Rüzgârı
+                    {currentTelemetry.windDirection !== null
+                      ? `${getCompass(currentTelemetry.windDirection)} Rüzgârı`
+                      : "Bölgesel Akış"}
                   </span>
                 </div>
               </div>
@@ -311,9 +325,9 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
               <div className="p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800/80 flex items-center justify-between text-xs text-zinc-300">
                 <div className="flex items-center gap-2">
                   <Battery className="h-4 w-4 text-emerald-400" />
-                  <span className="text-zinc-400 font-medium">Batarya:</span>
+                  <span className="text-zinc-400 font-medium">Batarya Seviyesi:</span>
                   <span className="font-mono font-semibold text-zinc-100">
-                    %{currentReading.battery} (3.92V)
+                    %{currentTelemetry.battery}
                   </span>
                 </div>
                 <span className="text-zinc-500 text-xs">3.7V LiFePO4 Güneş Destekli</span>
@@ -323,14 +337,14 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
             {/* TAB 2: Analitik & Zaman Serisi */}
             <TabsContent
               value="analytics"
-              className="flex-1 overflow-y-auto px-4 pt-3.5 pb-4 space-y-3 custom-scrollbar mt-0 focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 [--tw-ring-shadow:none!important] [--tw-ring-offset-shadow:none!important]"
+              className="flex-1 overflow-y-auto px-4 pt-3.5 pb-4 space-y-3 custom-scrollbar mt-0 focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 outline-none ring-0"
             >
               {/* Canlı Grafik */}
               <div className="p-4 rounded-xl bg-zinc-900/50 border border-zinc-800/80 space-y-2.5">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-zinc-200 font-semibold flex items-center gap-2">
                     <TrendingUp className="h-4 w-4 text-amber-400" />
-                    Canlı Telemetri Trendi (25s)
+                    Canlı Telemetri Trendi ({history.length} Örnek)
                   </span>
                   <div className="flex items-center gap-3 text-[11px] font-mono">
                     <span className="text-rose-400">● Sıcaklık</span>
@@ -341,7 +355,7 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
                 <div className="h-44 w-full pt-1">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={history} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                      <XAxis dataKey="updatedAt" hide />
+                      <XAxis dataKey="receivedAt" hide />
                       <YAxis stroke="#52525b" fontSize={10} domain={["auto", "auto"]} />
                       <Tooltip
                         contentStyle={{
@@ -375,42 +389,44 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
                 </div>
               </div>
 
-              {/* Türevsel Erken Algılama Analizi */}
+              {/* MCE ve Yangın Evresi Göstergeleri */}
               <div className="p-4 rounded-xl bg-zinc-900/50 border border-zinc-800/80 space-y-2.5">
                 <span className="text-xs font-semibold text-zinc-300 block">
-                  Türevsel Erken Algılama İndikatörleri
+                  Yanma Evresi & MCE İndikatörleri
                 </span>
                 <div className="grid grid-cols-2 gap-2.5 text-xs">
                   <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800/80">
-                    <span className="text-xs text-zinc-400 block">Sıcaklık Artış Hızı (ΔT/Δt)</span>
-                    <div className="mt-1">
-                      <span
-                        className={`text-base font-bold font-mono ${
-                          currentReading.tempRate > 1.5 ? "text-rose-400" : "text-zinc-100"
-                        }`}
-                      >
-                        {currentReading.tempRate > 0
-                          ? `+${currentReading.tempRate}`
-                          : currentReading.tempRate}
-                      </span>
-                      <span className="text-xs text-zinc-400 font-mono ml-1">°C/dk</span>
-                    </div>
+                    <span className="text-xs text-zinc-400 block">Yanma Evresi</span>
+                    <span className="text-sm font-semibold font-mono text-zinc-100 mt-1 block">
+                      {currentRisk?.stage === "flaming"
+                        ? "Alevli Yanma"
+                        : currentRisk?.stage === "smoldering"
+                          ? "İçin İçin Yanma"
+                          : currentRisk?.stage === "pyrolysis"
+                            ? "Piroliz (Gaz Çıkışı)"
+                            : "Normal"}
+                    </span>
                   </div>
                   <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800/80">
-                    <span className="text-xs text-zinc-400 block">CO Gaz Artış Hızı (ΔCO/Δt)</span>
-                    <div className="mt-1">
-                      <span
-                        className={`text-base font-bold font-mono ${
-                          currentReading.coRate > 5 ? "text-amber-400" : "text-zinc-100"
-                        }`}
-                      >
-                        {currentReading.coRate > 0
-                          ? `+${currentReading.coRate}`
-                          : currentReading.coRate}
-                      </span>
-                      <span className="text-xs text-zinc-400 font-mono ml-1">ppm/dk</span>
-                    </div>
+                    <span className="text-xs text-zinc-400 block">MCE Verimliliği</span>
+                    <span className="text-sm font-semibold font-mono text-zinc-100 mt-1 block">
+                      {currentRisk?.mce ? currentRisk.mce.toFixed(2) : "Nominal"}
+                    </span>
                   </div>
+                </div>
+
+                {/* Komşu Doğrulaması */}
+                <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800/80 flex items-center justify-between text-xs">
+                  <span className="text-zinc-400">Komşu Doğrulama:</span>
+                  <span
+                    className={`font-mono font-semibold ${
+                      currentRisk?.confirmed ? "text-emerald-400" : "text-zinc-400"
+                    }`}
+                  >
+                    {currentRisk?.confirmed
+                      ? `Doğrulandı (${currentRisk.confirmedBy.length} Komşu)`
+                      : "Tekil İstasyon"}
+                  </span>
                 </div>
               </div>
             </TabsContent>
@@ -418,7 +434,7 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
             {/* TAB 3: Donanım & Sensörler */}
             <TabsContent
               value="hardware"
-              className="flex-1 overflow-y-auto px-4 pt-3.5 pb-4 space-y-3 custom-scrollbar mt-0 focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 [--tw-ring-shadow:none!important] [--tw-ring-offset-shadow:none!important]"
+              className="flex-1 overflow-y-auto px-4 pt-3.5 pb-4 space-y-3 custom-scrollbar mt-0 focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 outline-none ring-0"
             >
               <div className="p-4 rounded-xl bg-zinc-900/50 border border-zinc-800/80 space-y-3">
                 <div className="flex items-center gap-2 text-xs font-semibold text-zinc-200 border-b border-zinc-800/80 pb-2.5">
@@ -430,7 +446,7 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
                   <div className="flex justify-between items-center pt-1">
                     <span className="text-zinc-400">Mikrodenetleyici</span>
                     <span className="text-zinc-200 font-mono">
-                      {currentStation.isHardware
+                      {currentStation.source === "wokwi"
                         ? "ESP32-WROOM-32E (Wokwi)"
                         : "Nordic nRF52840 / LoRa"}
                     </span>
@@ -441,19 +457,23 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
                   </div>
                   <div className="flex justify-between items-center pt-2">
                     <span className="text-zinc-400">Ortam Sensörü</span>
-                    <span className="text-zinc-200 font-medium">Bosch BME680 (Nem, Sıcaklık)</span>
+                    <span className="text-zinc-200 font-medium">
+                      Bosch BME688 (VOC, Nem, Sıcaklık)
+                    </span>
                   </div>
                   <div className="flex justify-between items-center pt-2">
                     <span className="text-zinc-400">Rüzgâr Anemometresi</span>
-                    <span className="text-zinc-200 font-medium">Hall-Effect Sayısal Sensör</span>
+                    <span className="text-zinc-200 font-medium">
+                      {currentStation.hasAnemometer
+                        ? "Hall-Effect Sayısal Sensör"
+                        : "IDW İnterpolasyon"}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center pt-2">
-                    <span className="text-zinc-400">İletişim Altyapısı</span>
-                    <span className="text-sky-300 font-mono">LoRaWAN 868 MHz (Semtech SX1262)</span>
-                  </div>
-                  <div className="flex justify-between items-center pt-2">
-                    <span className="text-zinc-400">Telemetri Paketi</span>
-                    <span className="text-zinc-200 font-mono">10-Bayt Binary + CRC-8</span>
+                    <span className="text-zinc-400">İletişim Protokolü</span>
+                    <span className="text-sky-300 font-mono">
+                      PyrosFrame v2 (16 Bayt İkili Çerçeve)
+                    </span>
                   </div>
                 </div>
               </div>
@@ -469,10 +489,8 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
                     </span>
                   </div>
                   <div>
-                    <span className="text-zinc-500 block text-[11px]">Zirve Rakımı:</span>
-                    <span className="text-zinc-200 font-medium">
-                      {currentStation.elevation} Metre
-                    </span>
+                    <span className="text-zinc-500 block text-[11px]">Saha Sektörü:</span>
+                    <span className="text-zinc-200 font-medium">Marmaris Balan Dağı</span>
                   </div>
                 </div>
               </div>
@@ -484,8 +502,10 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
         <DrawerFooter className="px-4 py-3 border-t border-zinc-800/80 bg-zinc-950 text-xs text-zinc-400 flex flex-row items-center justify-between shrink-0 m-0">
           <div className="flex items-center gap-2">
             <Radio className="h-3.5 w-3.5 text-emerald-400" />
-            <span>Son İletim:</span>
-            <span className="font-mono text-zinc-200">{currentReading.updatedAt}</span>
+            <span>Paket İletimi:</span>
+            <span className="font-mono text-zinc-200">
+              {new Date(currentTelemetry.receivedAt).toLocaleTimeString()}
+            </span>
           </div>
           <span className="font-mono text-[11px] text-zinc-500">CRC-8: DOĞRULANDI</span>
         </DrawerFooter>

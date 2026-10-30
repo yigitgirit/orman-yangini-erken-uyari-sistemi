@@ -1,36 +1,28 @@
-// Akdeniz Bölgesi (Antalya / Manavgat - Köprülü Kanyon Orman Sahası) sensör ağı.
-// 7x7 ızgara (49 simüle düğüm, ~120 m aralık) + 1 Wokwi ESP32 düğümü.
-// Aralık, gaz sensörlerinin yangını dakikalar içinde yakalayabildiği mesafeye göre seçildi.
+// Akdeniz Bölgesi (Antalya / Manavgat - Oymapınar Barajı & Yeniköy Yangın Sahası) sensör ağı.
+// 28 Temmuz 2021 Büyük Manavgat Yangını Referans Coğrafyası (Kızılçam Orman Havzası)
+// 7x7 ızgara (49 simüle düğüm, ~140 m aralık) + 1 Wokwi ESP32 donanım düğümü (#50).
+
+import type { SensorNode } from "./types.ts";
 
 export const NodeSource = {
   Sim: "sim", // apps/sensor-sim
   Wokwi: "wokwi", // ESP32 firmware (Wokwi simülatörü)
 } as const;
-export type NodeSource = (typeof NodeSource)[keyof typeof NodeSource];
-
-export interface SensorNode {
-  id: number;
-  name: string;
-  lat: number;
-  lng: number;
-  source: NodeSource;
-  hasAnemometer: boolean; // Rüzgâr sensörü her düğümde değil, istasyon başına
-}
 
 export const REGION_INFO = {
-  name: "Antalya Manavgat Orman Bölgesi",
-  centerLat: 36.91,
-  centerLng: 31.245,
-  defaultZoom: 16,
+  name: "Antalya Manavgat - Oymapınar Yangın Havzası",
+  centerLat: 36.895,
+  centerLng: 31.535,
+  defaultZoom: 13.8,
 } as const;
 
 export const GRID_SIZE = 7;
-export const GRID_SPACING_M = 120;
+export const GRID_SPACING_M = 140;
 
 const M_PER_DEG_LAT = 111_320;
 const mPerDegLng = (lat: number) => M_PER_DEG_LAT * Math.cos((lat * Math.PI) / 180);
 
-/** Izgara satırları A-G, sütunları 1-7 (A1 kuzeybatı köşe) */
+/** Izgara satırları A-G, sütunları 1-7 (A1 kuzeybatı Oymapınar kanyon girişi) */
 function buildGrid(): SensorNode[] {
   const nodes: SensorNode[] = [];
   const half = (GRID_SIZE - 1) / 2;
@@ -52,10 +44,10 @@ function buildGrid(): SensorNode[] {
   return nodes;
 }
 
-/** Wokwi düğümü ızgaranın doğu kenarında, D satırı hizasında; rüzgâr istasyonu (rüzgâr gülü + anemometre) */
+/** Wokwi düğümü: Oymapınar Baraj Göleti Doğu Seyir Noktası (#50) */
 const WOKWI_NODE: SensorNode = {
   id: 50,
-  name: "ESP32 (Wokwi)",
+  name: "Oymapınar Seyir (Wokwi)",
   lat: REGION_INFO.centerLat,
   lng: REGION_INFO.centerLng + (4 * GRID_SPACING_M) / mPerDegLng(REGION_INFO.centerLat),
   source: NodeSource.Wokwi,

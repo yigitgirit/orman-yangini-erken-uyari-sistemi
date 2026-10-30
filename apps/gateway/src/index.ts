@@ -3,6 +3,7 @@
 //
 // Calistirma: pnpm dev:gateway  (once: pnpm broker:up)
 
+import "@pyros/shared/env";
 import dgram from "node:dgram";
 import { MQTT_TOPICS, MQTT_URL, type TelemetryMessage, UDP_PORT, unpackFrame } from "@pyros/shared";
 import mqtt from "mqtt";

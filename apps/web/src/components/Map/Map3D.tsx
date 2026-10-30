@@ -1,22 +1,24 @@
+import type { NodeRisk, SensorNode, TelemetryMessage } from "@pyros/shared";
 import { RadioTower } from "lucide-react";
 import maplibregl, { type Map as MapLibreMap } from "maplibre-gl";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { REGION_CENTER } from "../../services/mockEngine";
-import type { GatewayInfo, SensorStation, TelemetryReading } from "../../types/simulation";
+import type { GatewayInfo } from "../../types/simulation";
 import { generateHuygensSpreadPolygon } from "./spreadCone";
 import { generateWindVectorFeature } from "./windVectors";
 
 interface Map3DProps {
-  stations: readonly SensorStation[];
-  telemetries: Map<number, TelemetryReading>;
+  stations: readonly SensorNode[];
+  telemetries: Map<number, TelemetryMessage>;
+  risks: Map<number, NodeRisk>;
   gateways: readonly GatewayInfo[];
   activeFireNodeId: number | null;
   windDirection: number;
   windSpeed: number;
   showWindLayer: boolean;
-  cameraFocusId: number | null;
+  cameraFocus: { lat: number; lng: number } | null;
   selectedStationId: number | null;
   selectedGatewayId: number | null;
   onSelectStation: (id: number) => void;
@@ -26,12 +28,13 @@ interface Map3DProps {
 export const Map3D: React.FC<Map3DProps> = ({
   stations,
   telemetries,
+  risks,
   gateways,
   activeFireNodeId,
   windDirection,
   windSpeed,
   showWindLayer,
-  cameraFocusId,
+  cameraFocus,
   selectedStationId,
   selectedGatewayId,
   onSelectStation,
@@ -148,11 +151,11 @@ export const Map3D: React.FC<Map3DProps> = ({
           "line-color": "#38bdf8",
           "line-width": 1.5,
           "line-opacity": 0.45,
-          "line-dasharray": [2, 2],
+          "line-dasharray": [3, 2],
         },
       });
 
-      // 2. Huygens Yangın Yayılım Konisi
+      // 2. Yangın Yayılım Konisi (Huygens Elips Modeli)
       map.addSource("fire-spread-cone", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
@@ -173,13 +176,13 @@ export const Map3D: React.FC<Map3DProps> = ({
         type: "line",
         source: "fire-spread-cone",
         paint: {
-          "line-color": "#f87171",
+          "line-color": "#dc2626",
           "line-width": 2,
           "line-opacity": 0.85,
         },
       });
 
-      // 3. Alarm Odaklı Rüzgâr Vektör Çizgisi
+      // 3. Rüzgâr Yön Vektörü (Ok)
       map.addSource("wind-vector", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
@@ -190,13 +193,14 @@ export const Map3D: React.FC<Map3DProps> = ({
         type: "line",
         source: "wind-vector",
         paint: {
-          "line-color": "#fbbf24",
-          "line-width": 2.5,
-          "line-dasharray": [3, 2],
+          "line-color": "#f59e0b",
+          "line-width": 3,
+          "line-opacity": 0.9,
+          "line-dasharray": [2, 1],
         },
       });
 
-      // 4. Tüm İstasyonların 3D Aerodinamik Rüzgâr Vektörleri Katmanı
+      // 4. 3D Rüzgâr Vektörleri Katmanı
       map.addSource("all-stations-wind", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
@@ -216,14 +220,7 @@ export const Map3D: React.FC<Map3DProps> = ({
         },
       });
 
-      // 5. HTML DOM Marker Container'larını Oluştur ve MapLibre'ye Ekle
-      for (const st of stations) {
-        const el = document.createElement("div");
-        el.className = "station-marker-root select-none pointer-events-auto";
-        new maplibregl.Marker({ element: el }).setLngLat([st.lng, st.lat]).addTo(map);
-        stationContainersRef.current.set(st.id, el);
-      }
-
+      // 5. HTML DOM Gateway Marker Container'ları
       for (const gw of gateways) {
         const el = document.createElement("div");
         el.className = "gateway-marker-root select-none pointer-events-auto";
@@ -238,9 +235,24 @@ export const Map3D: React.FC<Map3DProps> = ({
       map.remove();
       mapRef.current = null;
     };
-  }, [gateways, stations]);
+  }, [gateways]);
 
-  // 2. Yangın Yayılım Konisini ve Alarm Rüzgâr Çizgisini Güncelle
+  // İstasyonlar dinamik olarak geldiğinde Marker'ları senkronize et
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !markersReady) return;
+
+    for (const st of stations) {
+      if (!stationContainersRef.current.has(st.id)) {
+        const el = document.createElement("div");
+        el.className = "station-marker-root select-none pointer-events-auto";
+        new maplibregl.Marker({ element: el }).setLngLat([st.lng, st.lat]).addTo(map);
+        stationContainersRef.current.set(st.id, el);
+      }
+    }
+  }, [stations, markersReady]);
+
+  // 2. Yangın Yayılım Konisini Güncelle
   useEffect(() => {
     const map = mapRef.current;
     if (!map?.isStyleLoaded()) return;
@@ -300,68 +312,63 @@ export const Map3D: React.FC<Map3DProps> = ({
     const map = mapRef.current;
     if (!map?.isStyleLoaded()) return;
 
-    const windLayer = map.getLayer("all-stations-wind-line");
-    if (windLayer) {
-      map.setLayoutProperty(
-        "all-stations-wind-line",
-        "visibility",
-        showWindLayer ? "visible" : "none",
-      );
+    const windSource = map.getSource("all-stations-wind") as maplibregl.GeoJSONSource | undefined;
+    if (!windSource) return;
+
+    if (!showWindLayer) {
+      map.setLayoutProperty("all-stations-wind-line", "visibility", "none");
+      return;
     }
 
-    if (!showWindLayer) return;
+    map.setLayoutProperty("all-stations-wind-line", "visibility", "visible");
 
-    const allWindSource = map.getSource("all-stations-wind") as
-      | maplibregl.GeoJSONSource
-      | undefined;
-    if (!allWindSource) return;
+    // İstasyon telemetrilerindeki rüzgâr hız ve yönlerine göre vektör üret
+    const features = stations
+      .map((st) => {
+        const tel = telemetries.get(st.id);
+        const stWindSpeed = tel?.windSpeed ?? windSpeed;
+        const stWindDir = tel?.windDirection ?? windDirection;
 
-    // Her istasyon için hız ve yönüne göre aerodinamik 3D ok özelliği oluştur
-    const windFeatures = stations.map((st) => {
-      const tel = telemetries.get(st.id);
-      const dir = tel?.windDirection ?? windDirection;
-      const speed = tel?.windSpeed ?? windSpeed;
-      return generateWindVectorFeature(st.lat, st.lng, st.id, dir, speed);
-    });
+        return generateWindVectorFeature(st.lat, st.lng, st.id, stWindDir, stWindSpeed);
+      })
+      .filter((f): f is NonNullable<typeof f> => f !== null);
 
-    allWindSource.setData({
+    windSource.setData({
       type: "FeatureCollection",
-      features: windFeatures,
+      features,
     });
   }, [showWindLayer, stations, telemetries, windDirection, windSpeed]);
 
-  // 4. Kamera Odaklanma (flyTo)
+  // 4. Kamera Odaklanma (Sinematik Geçiş)
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !cameraFocusId) return;
-
-    const target = stations.find((s) => s.id === cameraFocusId);
-    if (!target) return;
+    if (!map || !cameraFocus) return;
 
     map.flyTo({
-      center: [target.lng, target.lat],
-      zoom: 14.6,
-      pitch: 66,
-      bearing: -25,
-      speed: 1.1,
-      curve: 1.4,
+      center: [cameraFocus.lng, cameraFocus.lat],
+      zoom: 14.8,
+      pitch: 65,
+      bearing: map.getBearing(),
+      duration: 1500,
       essential: true,
     });
-  }, [cameraFocusId, stations]);
+  }, [cameraFocus]);
 
   return (
     <div ref={mapContainer} className="absolute inset-0 w-full h-full bg-zinc-950">
-      {/* 5. React DOM Markers: İkonlar, Belirgin Numaralar, Hover ve Seçim Animasyonları */}
+      {/* 5. React DOM Markers */}
       {markersReady && (
         <>
-          {/* A. 31 Adet Siber-Fiziksel Sensör Düğümü (Node) */}
+          {/* A. Sensör Düğümleri */}
           {stations.map((st) => {
             const container = stationContainersRef.current.get(st.id);
             if (!container) return null;
 
-            const tel = telemetries.get(st.id);
+            const rsk = risks.get(st.id);
             const isSelected = st.id === selectedStationId;
-            const riskLevel = tel?.riskLevel ?? "normal";
+            const riskLevel = rsk?.level ?? "green";
+            const isFire = riskLevel === "red";
+            const isSmoldering = riskLevel === "yellow";
 
             return createPortal(
               <button
@@ -378,48 +385,48 @@ export const Map3D: React.FC<Map3DProps> = ({
                 {/* Siber-Fiziksel İstasyon Düğümü (Node İkonu) */}
                 <div
                   className={`relative flex items-center justify-center w-6 h-6 rounded-full transition-all duration-300 ${
-                    riskLevel === "fire"
+                    isFire
                       ? "bg-red-950/90 border border-red-500 shadow-[0_0_12px_rgba(239,68,68,0.7)]"
-                      : riskLevel === "smoldering"
+                      : isSmoldering
                         ? "bg-amber-950/90 border border-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.6)]"
-                        : st.isHardware
+                        : st.source === "wokwi"
                           ? "bg-sky-950/90 border border-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.5)]"
                           : "bg-zinc-950/90 border border-emerald-500/70 shadow-[0_0_6px_rgba(16,185,129,0.3)]"
                   } ${isSelected ? "ring-2 ring-emerald-400 ring-offset-2 ring-offset-zinc-950" : ""}`}
                 >
-                  {/* Düğüm Dış Radar Dalgaları (Yangın/Tütme anında hareketli) */}
-                  {(riskLevel === "fire" || riskLevel === "smoldering") && (
+                  {/* Düğüm Dış Radar Dalgaları */}
+                  {(isFire || isSmoldering) && (
                     <span
                       className={`absolute inset-0 rounded-full animate-ping opacity-75 ${
-                        riskLevel === "fire" ? "bg-red-500" : "bg-amber-500"
+                        isFire ? "bg-red-500" : "bg-amber-500"
                       }`}
                     />
                   )}
 
-                  {/* 4 Eksenli Mikro Düğüm Çentikleri (Teknik Görünüm) */}
+                  {/* 4 Eksenli Mikro Düğüm Çentikleri */}
                   <span className="absolute -top-0.5 w-0.5 h-1 bg-zinc-600/80" />
                   <span className="absolute -bottom-0.5 w-0.5 h-1 bg-zinc-600/80" />
                   <span className="absolute -left-0.5 h-0.5 w-1 bg-zinc-600/80" />
                   <span className="absolute -right-0.5 h-0.5 w-1 bg-zinc-600/80" />
 
-                  {/* Merkezdeki LED Sensör Çekirdeği (Core Node) */}
+                  {/* LED Sensör Çekirdeği */}
                   <span
                     className={`w-2 h-2 rounded-full transition-colors duration-200 ${
-                      riskLevel === "fire"
+                      isFire
                         ? "bg-red-500 shadow-[0_0_6px_#ef4444]"
-                        : riskLevel === "smoldering"
+                        : isSmoldering
                           ? "bg-amber-400 shadow-[0_0_6px_#f59e0b]"
-                          : st.isHardware
+                          : st.source === "wokwi"
                             ? "bg-sky-400 shadow-[0_0_6px_#38bdf8]"
                             : "bg-emerald-400 shadow-[0_0_4px_#10b981]"
                     }`}
                   />
                 </div>
 
-                {/* Büyütülmüş ve Netleştirilmiş İstasyon Numarası Etiketi */}
+                {/* İstasyon Numarası Etiketi */}
                 <span className="mt-1 px-1.5 py-0.5 bg-zinc-950/95 border border-zinc-700/90 rounded-sm text-xs font-mono font-bold text-zinc-100 shadow-md flex items-center gap-1 whitespace-nowrap">
                   <span>#{st.id}</span>
-                  {st.isHardware && (
+                  {st.source === "wokwi" && (
                     <span className="text-[10px] text-sky-400 font-semibold">[WOKWI]</span>
                   )}
                 </span>
@@ -428,7 +435,7 @@ export const Map3D: React.FC<Map3DProps> = ({
             );
           })}
 
-          {/* B. 2 Adet LoRaWAN Ağ Geçidi Kulesi (Gateway) */}
+          {/* B. LoRaWAN Ağ Geçidi Kuleleri */}
           {gateways.map((gw) => {
             const container = gatewayContainersRef.current.get(gw.id);
             if (!container) return null;
@@ -454,11 +461,9 @@ export const Map3D: React.FC<Map3DProps> = ({
                   }`}
                 >
                   <RadioTower className="h-4 w-4" />
-                  {/* Soluk yayın dalgası */}
                   <span className="absolute inset-0 rounded-full animate-ping opacity-35 bg-sky-400" />
                 </div>
 
-                {/* Büyütülmüş ve Netleştirilmiş Kule Etiketi */}
                 <span className="mt-1 px-1.5 py-0.5 bg-zinc-950/95 border border-sky-800/90 rounded-sm text-xs font-mono font-bold text-sky-300 shadow-md flex items-center gap-1.5 whitespace-nowrap">
                   <span>GW-0{gw.id}</span>
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />

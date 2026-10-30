@@ -112,7 +112,7 @@ export const GatewayInspector: React.FC<GatewayInspectorProps> = ({
             {/* TAB 1: Kapsama ve Altyapı */}
             <TabsContent
               value="coverage"
-              className="flex-1 overflow-y-auto px-4 pt-3.5 pb-4 space-y-3 custom-scrollbar mt-0 focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 [--tw-ring-shadow:none!important] [--tw-ring-offset-shadow:none!important]"
+              className="flex-1 overflow-y-auto px-4 pt-3.5 pb-4 space-y-3 custom-scrollbar mt-0 focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 outline-none ring-0"
             >
               {/* Kapsama ve Düğüm Özet Kartları */}
               <div className="grid grid-cols-2 gap-2.5">
@@ -183,7 +183,7 @@ export const GatewayInspector: React.FC<GatewayInspectorProps> = ({
             {/* TAB 2: RF Sinyal ve Sağlık */}
             <TabsContent
               value="rf"
-              className="flex-1 overflow-y-auto px-4 pt-3.5 pb-4 space-y-3 custom-scrollbar mt-0 focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 [--tw-ring-shadow:none!important] [--tw-ring-offset-shadow:none!important]"
+              className="flex-1 overflow-y-auto px-4 pt-3.5 pb-4 space-y-3 custom-scrollbar mt-0 focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 outline-none ring-0"
             >
               <div className="bg-zinc-900/50 border border-zinc-800/80 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2.5">
@@ -240,7 +240,7 @@ export const GatewayInspector: React.FC<GatewayInspectorProps> = ({
             {/* TAB 3: Kapsanan İstasyonlar */}
             <TabsContent
               value="nodes"
-              className="flex-1 overflow-y-auto px-4 pt-3.5 pb-4 space-y-3 custom-scrollbar mt-0 focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 [--tw-ring-shadow:none!important] [--tw-ring-offset-shadow:none!important]"
+              className="flex-1 overflow-y-auto px-4 pt-3.5 pb-4 space-y-3 custom-scrollbar mt-0 focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 outline-none ring-0"
             >
               <div className="flex items-center justify-between text-xs">
                 <span className="font-semibold text-zinc-200">

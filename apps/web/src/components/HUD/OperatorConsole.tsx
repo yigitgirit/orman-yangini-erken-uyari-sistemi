@@ -1,4 +1,4 @@
-import { Compass, Cpu, Flame, RotateCcw, Wind } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Compass, RotateCcw, Wind } from "lucide-react";
 import type React from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +9,6 @@ interface OperatorConsoleProps {
   windDirection: number;
   windSpeed: number;
   showWindLayer: boolean;
-  onToggleFire: (nodeId: number) => void;
   onWindDirectionChange: (deg: number) => void;
   onToggleWindLayer: () => void;
   onResetCamera: () => void;
@@ -20,7 +19,6 @@ export const OperatorConsole: React.FC<OperatorConsoleProps> = ({
   windDirection,
   windSpeed,
   showWindLayer,
-  onToggleFire,
   onWindDirectionChange,
   onToggleWindLayer,
   onResetCamera,
@@ -46,32 +44,30 @@ export const OperatorConsole: React.FC<OperatorConsoleProps> = ({
         </CardHeader>
 
         <CardContent className="p-3 space-y-3 text-xs font-mono">
-          {/* 1. Yangın Senaryosu Butonları */}
+          {/* 1. Canlı Saha Durum Göstergesi */}
           <div className="space-y-1.5">
             <div className="text-[10px] text-zinc-500 uppercase tracking-wider">
-              Senaryo Tetikleyicisi
+              Saha Tehdit Durumu
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                variant={activeFireNodeId === 14 ? "destructive" : "outline"}
-                size="sm"
-                className="w-full text-[11px] h-7"
-                onClick={() => onToggleFire(14)}
-              >
-                <Flame className="h-3 w-3 mr-1" />
-                {activeFireNodeId === 14 ? "Durdur" : "Düğüm #14"}
-              </Button>
-
-              <Button
-                variant={activeFireNodeId === 31 ? "destructive" : "outline"}
-                size="sm"
-                className="w-full text-[11px] h-7"
-                onClick={() => onToggleFire(31)}
-              >
-                <Cpu className="h-3 w-3 mr-1 text-sky-400" />
-                {activeFireNodeId === 31 ? "Durdur" : "Wokwi #31"}
-              </Button>
-            </div>
+            {activeFireNodeId ? (
+              <div className="flex items-center justify-between p-2 rounded-lg bg-rose-950/50 border border-rose-800/80 text-rose-300 text-xs">
+                <span className="flex items-center gap-1.5 font-bold tracking-tight">
+                  <AlertTriangle className="h-4 w-4 text-rose-400 animate-pulse shrink-0" />
+                  Düğüm #{activeFireNodeId} Yangın Uyarısı
+                </span>
+                <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-rose-900/60 text-rose-200">
+                  ALARM
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between p-2 rounded-lg bg-zinc-900/60 border border-zinc-800/80 text-zinc-400 text-xs">
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                  Tüm İstasyonlar Stabil
+                </span>
+                <span className="text-[10px] font-mono text-emerald-400">NOMİNAL</span>
+              </div>
+            )}
           </div>
 
           {/* 2. Rüzgâr Azimut Slider */}
@@ -124,7 +120,7 @@ export const OperatorConsole: React.FC<OperatorConsoleProps> = ({
           {/* 4. Durum Özeti */}
           <div className="pt-1 text-[10px] text-zinc-500 flex justify-between items-center">
             <span>Rüzgâr Şiddeti:</span>
-            <span className="text-zinc-300">{windSpeed} m/s (Hafif Esinti)</span>
+            <span className="text-zinc-300">{windSpeed.toFixed(1)} m/s (Hafif Esinti)</span>
           </div>
         </CardContent>
       </Card>

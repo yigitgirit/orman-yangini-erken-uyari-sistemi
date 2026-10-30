@@ -1,18 +1,22 @@
 // Katman 1: Sensor Simulatoru (Dijital Ikiz)
+// Antalya Manavgat - Oymapinar Yangin Sahasi (28 Temmuz 2021 Gercek Senaryo Modeli)
 // 49 izgara dugumu icin okuma uretir -> PyrosFrame v2 (16 bayt) -> UDP :5005
-// (50 numarali dugum Wokwi ESP32'dir, burada simule edilmez.)
+// (50 numarali dugum Oymapinar Seyir ESP32 donanim dugumudur.)
 //
 // Calistirma: pnpm dev:sensor
-// Yangin senaryosu: FIRE_NODE=25 pnpm dev:sensor
-//   FIRE_DELAY_S  yangin baslamadan once taban olusturma suresi (varsayilan 60)
+// Yangin senaryosu: FIRE_NODE=11 pnpm dev:sensor
+//   FIRE_DELAY_S  yangin baslamadan once taban olusturma suresi (varsayilan 45)
 //   FIRE_SPEED    zaman hizlandirma katsayisi (varsayilan 1; 2 = iki kat hizli)
 //
-// Yangin evreleri (kaynakta, FIRE_SPEED=1):
-//   0-2 dk  piroliz       : VOC (H2 + organik gazlar) yukselir, CO henuz yok
-//   2-6 dk  icin icin     : CO + duman (PM2.5) yukselir, CO2 ~4xCO (MCE ~0.8)
-//   6+ dk   alevli        : CO2 ve sicaklik hizla artar, nem duser (MCE > 0.95)
-// Komsu dugumler ayni deseni mesafeye ve ruzgar yonune gore gecikmeli/zayiflamis gorur.
+// Manavgat Yangini meteorolojisi ve evreleri:
+//   Kuru & Kavurucu Poyraz: Kuzeydogu (30°) yonunden 7.2 m/s (~26 km/h, hamleler 12 m/s)
+//   Taban: 39°C sicaklik, %12 bagil nem (asiri kuruluk)
+//   0-2 dk  piroliz       : Kizilcam recine ve terpen gazlari (VOC) firlar, CO henuz dusuk
+//   2-6 dk  icin icin     : Ibre tutusmasi, CO ve PM2.5 duman yogunlugu artar, MCE ~0.8
+//   6+ dk   alevli        : Tepe yangini (crowning), CO2 ve sicaklik zirve yapar (>65°C artis), nem <%5
+// Poyraz ruzgari yangin dumanini ve isi dalgasini 210° (Guneybati) eksenindeki komsu dugumlere tasir.
 
+import "@pyros/shared/env";
 import dgram from "node:dgram";
 import {
   bearingDeg,
@@ -34,26 +38,25 @@ import {
 const socket = dgram.createSocket("udp4");
 
 const fireNode = getNode(Number(process.env.FIRE_NODE ?? 0));
-const fireDelayS = Number(process.env.FIRE_DELAY_S ?? 60);
+const fireDelayS = Number(process.env.FIRE_DELAY_S ?? 45);
 const fireSpeed = Number(process.env.FIRE_SPEED ?? 1);
 const startedAt = Date.now();
 
-// --- Canli ruzgar modeli -----------------------------------------------------
-// Bolgesel ruzgar ortalamada guneybatidan (225°) ~3.5 m/s esiyor. Yon ve hiz ortalamaya
-// cekilen rastgele yuruyusle (Ornstein-Uhlenbeck) yavasca kayar, ara sira hamle (gust) gelir.
-// Istasyonlar arazi etkisiyle (kanyon/sirt) sabit bir yon sapmasi ve hiz katsayisi gorur.
-const WIND_MEAN = { speed: 3.5, fromDeg: 225 };
+// --- Canli ruzgar modeli (Manavgat Poyraz Ruzgari) ----------------------------
+// 28 Temmuz 2021 Manavgat yangininda etkili olan sert ve kuru Kuzey-Kuzeydogu Poyrazi (30°).
+// Ortalama 7.2 m/s hizinda eser, arazi kanyonlarinda hamleler (gust) 12-14 m/s'ye ulasir.
+const WIND_MEAN = { speed: 7.2, fromDeg: 30 };
 const WIND = { speed: WIND_MEAN.speed, fromDeg: WIND_MEAN.fromDeg };
 let baseSpeed = WIND_MEAN.speed;
 let gust = 0;
 
 function updateWind(dtS: number): void {
   const angleDiff = ((WIND_MEAN.fromDeg - WIND.fromDeg + 540) % 360) - 180;
-  WIND.fromDeg = (WIND.fromDeg + 0.02 * angleDiff * dtS + rand(6) * Math.sqrt(dtS) + 360) % 360;
-  baseSpeed += 0.05 * (WIND_MEAN.speed - baseSpeed) * dtS + rand(0.6) * Math.sqrt(dtS);
-  if (Math.random() < 0.03 * dtS) gust = 1.5 + Math.random() * 3; // ~30 sn'de bir hamle
+  WIND.fromDeg = (WIND.fromDeg + 0.02 * angleDiff * dtS + rand(4) * Math.sqrt(dtS) + 360) % 360;
+  baseSpeed += 0.05 * (WIND_MEAN.speed - baseSpeed) * dtS + rand(0.8) * Math.sqrt(dtS);
+  if (Math.random() < 0.05 * dtS) gust = 2.0 + Math.random() * 4.5; // ~20 sn'de bir sert hamle
   gust *= Math.exp(-dtS / 4); // hamle ~4 sn'de soner
-  WIND.speed = Math.max(0.2, baseSpeed + gust);
+  WIND.speed = Math.max(0.5, baseSpeed + gust);
 }
 
 // --- Enerji modeli ---------------------------------------------------------
@@ -86,15 +89,15 @@ const rand = (n: number) => (Math.random() - 0.5) * n;
 const states: NodeState[] = NODES.filter((n) => n.source === NodeSource.Sim).map((node) => ({
   node,
   base: {
-    temperature: 24 + rand(3),
-    humidity: 50 + rand(12),
-    co: 0.3 + rand(0.2),
-    co2: 420 + rand(10),
-    vocIndex: 100 + rand(10),
-    pm25: 12 + rand(6),
+    temperature: 39 + rand(2), // Manavgat Temmuz kavurucu yaz tabani
+    humidity: 12 + rand(3), // Kritik kuru hava (%10-15)
+    co: 0.2 + rand(0.1),
+    co2: 418 + rand(8),
+    vocIndex: 90 + rand(10),
+    pm25: 10 + rand(4),
   },
-  terrain: { dirOffset: rand(40), speedFactor: 0.75 + Math.random() * 0.5 },
-  battery: 70 + Math.random() * 30,
+  terrain: { dirOffset: rand(30), speedFactor: 0.85 + Math.random() * 0.4 },
+  battery: 75 + Math.random() * 25,
   mode: NodeMode.Normal,
   lastAnomalyAt: 0,
   nextSendAt: Date.now() + Math.random() * SENSOR_INTERVAL_MS.normal, // gonderimleri dagit
@@ -106,14 +109,14 @@ function sourceEmission(t: number) {
   const pyro = Math.min(t / 2, 1);
   const smold = Math.min(Math.max((t - 2) / 4, 0), 1);
   const flame = Math.min(Math.max((t - 6) / 4, 0), 1);
-  const co = 40 * smold + 25 * flame;
+  const co = 45 * smold + 30 * flame;
   return {
-    voc: 160 * pyro + 120 * smold,
+    voc: 190 * pyro + 130 * smold, // Kizilcam recineli piroliz
     co,
-    co2: 4 * co + 2500 * flame, // icin icin: MCE ~0.8, alevli: MCE > 0.95
-    pm25: 15 * pyro + 400 * smold + 600 * flame,
-    heat: 1.5 * smold + 60 * flame, // °C
-    dry: 5 * smold + 35 * flame, // nem kaybi, %
+    co2: 4.2 * co + 2800 * flame, // Icin icin: MCE ~0.8, Alevli: MCE > 0.95
+    pm25: 25 * pyro + 480 * smold + 700 * flame,
+    heat: 3 * smold + 68 * flame, // °C sicaklik artisi
+    dry: 4 * smold + 8 * flame, // Nem kaybi, %
   };
 }
 

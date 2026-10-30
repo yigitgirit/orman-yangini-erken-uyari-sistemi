@@ -1,182 +1,132 @@
 import type React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { GatewayInspector } from "./components/HUD/GatewayInspector";
+import { OfflineBanner } from "./components/HUD/OfflineBanner";
 import { OperatorConsole } from "./components/HUD/OperatorConsole";
 import { TelemetryInspector } from "./components/HUD/TelemetryInspector";
 import { TopStatusBar } from "./components/HUD/TopStatusBar";
 import { Map3D } from "./components/Map/Map3D";
-import { FOREST_STATIONS, GATEWAYS, MockSimulationEngine } from "./services/mockEngine";
-import type { EnvironmentalImpact, TelemetryReading } from "./types/simulation";
+import { useInspectorSelection } from "./hooks/useInspectorSelection";
+import { usePyrosData } from "./hooks/usePyrosData";
+import { GATEWAYS } from "./services/mockEngine";
 
 export const App: React.FC = () => {
-  const engineRef = useRef<MockSimulationEngine>(new MockSimulationEngine());
+  // 1. Canlı Telemetri ve Veri Katmanı Hook'u
+  const {
+    nodes,
+    telemetries,
+    risks,
+    telemetryHistory,
+    windField,
+    impact,
+    connectionStatus,
+    isMockMode,
+    wsUrl,
+  } = usePyrosData();
 
-  const [telemetries, setTelemetries] = useState<Map<number, TelemetryReading>>(new Map());
-  const [impact, setImpact] = useState<EnvironmentalImpact>({
-    riskAreaHectares: 0,
-    preventedCo2Tons: 0,
-    savedTreesEstimate: 0,
-  });
-  const [activeFireNodeId, setActiveFireNodeId] = useState<number | null>(null);
-  const [windDirection, setWindDirection] = useState<number>(335);
-  const [windSpeed, setWindSpeed] = useState<number>(7.4);
-  const [showWindLayer, setShowWindLayer] = useState<boolean>(false);
-  const [cameraFocusId, setCameraFocusId] = useState<number | null>(null);
+  // 2. İstasyon/Gateway Drawer Seçimi ve Kamera Yönetimi Hook'u
+  const {
+    selectedStationId,
+    isInspectorOpen,
+    selectedGatewayId,
+    isGatewayInspectorOpen,
+    cameraFocus,
+    selectStation,
+    closeStation,
+    selectGateway,
+    closeGateway,
+  } = useInspectorSelection(nodes);
 
-  // İstasyon ve Gateway Drawer & Seçim Durumları
-  const [selectedStationId, setSelectedStationId] = useState<number | null>(null);
-  const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(false);
-
-  const [selectedGatewayId, setSelectedGatewayId] = useState<number | null>(null);
-  const [isGatewayInspectorOpen, setIsGatewayInspectorOpen] = useState<boolean>(false);
-
-  // 1 saniyelik simülasyon döngüsü
-  useEffect(() => {
-    const engine = engineRef.current;
-
-    // İlk adım
-    const initial = engine.step();
-    const map = new Map<number, TelemetryReading>();
-    for (const r of initial.readings) {
-      map.set(r.stationId, r);
-    }
-    setTelemetries(map);
-    setImpact(initial.impact);
-
-    const timer = setInterval(() => {
-      const step = engine.step();
-      const nextMap = new Map<number, TelemetryReading>();
-      for (const r of step.readings) {
-        nextMap.set(r.stationId, r);
+  // 3. Sahadaki Sensörlerden/Backend'den Gelen Aktif Yangın / Anomali Düğümü
+  const activeFireNodeId = useMemo(() => {
+    let highestRiskNodeId: number | null = null;
+    let highestScore = 0;
+    for (const [nodeId, risk] of risks.entries()) {
+      if (risk.level === "red" || risk.stage === "flaming" || risk.stage === "smoldering") {
+        if (risk.score > highestScore) {
+          highestScore = risk.score;
+          highestRiskNodeId = nodeId;
+        }
       }
-      setTelemetries(nextMap);
-      setImpact(step.impact);
-      setActiveFireNodeId(engine.getFireNodeId());
-      setWindDirection(engine.getWindDirection());
-      setWindSpeed(engine.getWindSpeed());
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, []);
-
-  // Yangın senaryosunu aç/kapat
-  const handleToggleFire = (nodeId: number) => {
-    const engine = engineRef.current;
-    if (activeFireNodeId === nodeId) {
-      engine.setFireScenario(null);
-      setActiveFireNodeId(null);
-    } else {
-      engine.setFireScenario(nodeId);
-      setActiveFireNodeId(nodeId);
-      setCameraFocusId(nodeId); // Yangın çıkan düğüme sinematik odaklan
-      setSelectedGatewayId(null);
-      setIsGatewayInspectorOpen(false);
-      setSelectedStationId(nodeId);
-      setIsInspectorOpen(true);
     }
-  };
+    return highestRiskNodeId;
+  }, [risks]);
 
-  // Rüzgâr yönünü slider ile güncelle
-  const handleWindDirectionChange = (deg: number) => {
-    engineRef.current.setWindDirection(deg);
-    setWindDirection(deg);
-  };
+  // 4. Arayüz Katmanı Durumları
+  const [showWindLayer, setShowWindLayer] = useState<boolean>(false);
+  const [manualWindDirection, setManualWindDirection] = useState<number>(335);
 
-  // Haritada istasyon seçme
-  const handleSelectStation = (id: number) => {
-    setSelectedGatewayId(null);
-    setIsGatewayInspectorOpen(false);
-    setSelectedStationId(id);
-    setIsInspectorOpen(true);
-  };
+  const windDirection = windField?.regional.directionTo ?? manualWindDirection;
+  const windSpeed = windField?.regional.speed ?? 7.4;
 
-  // Haritada gateway (kule) seçme
-  const handleSelectGateway = (id: number) => {
-    setSelectedStationId(null);
-    setIsInspectorOpen(false);
-    setSelectedGatewayId(id);
-    setIsGatewayInspectorOpen(true);
-  };
+  const currentStation = nodes.find((n) => n.id === selectedStationId) ?? null;
+  const currentTelemetry = selectedStationId ? (telemetries.get(selectedStationId) ?? null) : null;
+  const currentRisk = selectedStationId ? (risks.get(selectedStationId) ?? null) : null;
+  const currentHistory = selectedStationId ? (telemetryHistory.get(selectedStationId) ?? []) : [];
 
-  // İstasyon çekmecesi kapatıldığında ikon eski boyutuna döner
-  const handleCloseStationDrawer = () => {
-    setIsInspectorOpen(false);
-    setSelectedStationId(null);
-  };
-
-  // Gateway çekmecesi kapatıldığında kule ikonu eski boyutuna döner
-  const handleCloseGatewayDrawer = () => {
-    setIsGatewayInspectorOpen(false);
-    setSelectedGatewayId(null);
-  };
-
-  // Kamerayı kuşbakışı genel görünüme sıfırla
-  const handleResetCamera = () => {
-    setCameraFocusId(null);
-  };
-
-  const selectedStation = FOREST_STATIONS.find((s) => s.id === selectedStationId) ?? null;
-  const selectedReading = selectedStationId ? (telemetries.get(selectedStationId) ?? null) : null;
-  const selectedHistory = selectedStationId ? engineRef.current.getHistory(selectedStationId) : [];
-
-  const selectedGateway = GATEWAYS.find((gw) => gw.id === selectedGatewayId) ?? null;
+  const currentGateway = GATEWAYS.find((g) => g.id === selectedGatewayId) ?? null;
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-zinc-950">
-      {/* 1. 3D Arazi ve Uydu Haritası Katmanı */}
+    <div className="relative w-screen h-screen overflow-hidden bg-zinc-950 font-sans select-none">
+      {/* Üst Operasyon Durum Çubuğu */}
+      <TopStatusBar
+        totalStations={nodes.length}
+        activeFireNodeId={activeFireNodeId}
+        windDirection={Math.round(windDirection)}
+        windSpeed={windSpeed}
+        impact={impact}
+        connectionStatus={connectionStatus}
+        isMockMode={isMockMode}
+      />
+
+      {/* Sunucu Çevrimdışı / Bağlantı Bekleniyor Uyarısı ("Kapalıyız" Durumu) */}
+      <OfflineBanner status={connectionStatus} isMockMode={isMockMode} wsUrl={wsUrl} />
+
+      {/* 3B Topografik Arazi ve İstasyon Haritası */}
       <Map3D
-        stations={FOREST_STATIONS}
+        stations={nodes}
         telemetries={telemetries}
+        risks={risks}
         gateways={GATEWAYS}
         activeFireNodeId={activeFireNodeId}
         windDirection={windDirection}
         windSpeed={windSpeed}
         showWindLayer={showWindLayer}
-        cameraFocusId={cameraFocusId}
+        cameraFocus={cameraFocus}
         selectedStationId={selectedStationId}
         selectedGatewayId={selectedGatewayId}
-        onSelectStation={handleSelectStation}
-        onSelectGateway={handleSelectGateway}
+        onSelectStation={selectStation}
+        onSelectGateway={selectGateway}
       />
 
-      {/* 2. Üst Kompakt Durum Şeridi (Header - Sabit Üstte) */}
-      <TopStatusBar
-        totalStations={FOREST_STATIONS.length}
-        activeFireNodeId={activeFireNodeId}
-        windDirection={windDirection}
-        windSpeed={windSpeed}
-        impact={impact}
-      />
-
-      {/* 3. Sol Alt Operatör / Jüri Konsolu */}
+      {/* Sol Alt Operatör Konsolu */}
       <OperatorConsole
         activeFireNodeId={activeFireNodeId}
-        windDirection={windDirection}
+        windDirection={Math.round(windDirection)}
         windSpeed={windSpeed}
         showWindLayer={showWindLayer}
-        onToggleFire={handleToggleFire}
-        onWindDirectionChange={handleWindDirectionChange}
+        onWindDirectionChange={setManualWindDirection}
         onToggleWindLayer={() => setShowWindLayer((prev) => !prev)}
-        onResetCamera={handleResetCamera}
+        onResetCamera={() => selectStation(25)}
       />
 
-      {/* 4. Sağ Taraf Slide-Over İstasyon Detay Çekmecesi (Drawer) */}
+      {/* İstasyon Telemetri Detay Çekmecesi */}
       <TelemetryInspector
-        station={selectedStation}
-        reading={selectedReading}
-        history={selectedHistory}
+        station={currentStation}
+        telemetry={currentTelemetry}
+        risk={currentRisk}
+        history={currentHistory}
         isOpen={isInspectorOpen}
-        onClose={handleCloseStationDrawer}
+        onClose={closeStation}
       />
 
-      {/* 5. Sağ Taraf Slide-Over Ağ Geçidi (Gateway) Detay Çekmecesi (Drawer) */}
+      {/* Ağ Geçidi (Gateway) Detay Çekmecesi */}
       <GatewayInspector
-        gateway={selectedGateway}
+        gateway={currentGateway}
         isOpen={isGatewayInspectorOpen}
-        onClose={handleCloseGatewayDrawer}
-        onSelectStation={handleSelectStation}
+        onClose={closeGateway}
+        onSelectStation={selectStation}
       />
     </div>
   );
 };
-export default App;

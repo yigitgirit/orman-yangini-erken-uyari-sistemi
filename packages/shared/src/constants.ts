@@ -1,15 +1,16 @@
 // Sistem genelinde paylaşılan sabitler (port, MQTT konuları, analiz eşikleri, emisyon modeli).
-import "./env.ts";
+
+const env = typeof process !== "undefined" && process?.env ? process.env : {};
 
 /** Sensör -> Gateway UDP portu */
-export const UDP_PORT = process.env.UDP_PORT ? Number(process.env.UDP_PORT) : 5005;
-export const UDP_HOST = process.env.UDP_HOST ?? "127.0.0.1";
+export const UDP_PORT = env.UDP_PORT ? Number(env.UDP_PORT) : 5005;
+export const UDP_HOST = env.UDP_HOST ?? "127.0.0.1";
 
 /** Mosquitto (docker-compose.yml) */
-export const MQTT_URL = process.env.MQTT_URL ?? "mqtt://localhost:1883";
+export const MQTT_URL = env.MQTT_URL ?? "mqtt://localhost:1883";
 
 /** Backend -> Web WebSocket portu */
-export const WS_PORT = process.env.WS_PORT ? Number(process.env.WS_PORT) : 8080;
+export const WS_PORT = env.WS_PORT ? Number(env.WS_PORT) : 8080;
 
 /** MQTT konu şablonları: sensors/{id}/telemetry */
 export const MQTT_TOPICS = {
