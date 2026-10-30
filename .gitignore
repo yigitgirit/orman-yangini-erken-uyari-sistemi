@@ -12,3 +12,7 @@ dist/
 *.swp
 *.swo
 .DS_Store
+
+# Firmware (PlatformIO)
+firmware/.pio/
+firmware/include/secrets.h

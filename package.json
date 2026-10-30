@@ -15,6 +15,7 @@
     "dev:sensor": "pnpm --filter @pyros/sensor-sim dev",
     "dev:gateway": "pnpm --filter @pyros/gateway dev",
     "dev:backend": "pnpm --filter @pyros/backend dev",
+    "dev:monitor": "pnpm --filter @pyros/backend monitor",
     "dev:web": "pnpm --filter @pyros/web dev",
     "typecheck": "pnpm -r typecheck",
     "lint": "biome lint .",
