@@ -25,7 +25,9 @@ export const TopStatusBar: React.FC<TopStatusBarProps> = ({
         <div className="flex items-center space-x-1.5 text-zinc-100 font-semibold tracking-wider text-[11px]">
           <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
           <span>PYROSECO</span>
-          <span className="text-[10px] text-zinc-500 font-normal">| MANAVGAT 3D DEM</span>
+          <span className="text-[10px] text-zinc-500 font-normal">
+            | MARMARİS BALAN DAĞI 3D DEM
+          </span>
         </div>
 
         <div className="h-3 w-[1px] bg-zinc-800" />

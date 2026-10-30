@@ -1,5 +1,5 @@
-// Akdeniz Bölgesi (Antalya / Manavgat - Köprülü Kanyon Orman Sahası) 8 sensör istasyonu.
-// Akdeniz kızılçam ve maki bitki örtüsü yangın riski simülasyonu için örnek koordinatlar.
+// Ege Bölgesi (Muğla / Marmaris - Balan Dağı & Bördübet Orman Sahası) 8 sensör istasyonu.
+// Ağustos 2021 büyük Ege orman yangını sahası (Kızılçam ve Sığla ormanları) koordinatları.
 
 export interface SensorNode {
   id: number;
@@ -9,19 +9,19 @@ export interface SensorNode {
 }
 
 export const REGION_INFO = {
-  name: "Antalya Manavgat Orman Bölgesi",
-  centerLat: 36.91,
-  centerLng: 31.245,
+  name: "Marmaris Balan Dağı Orman Bölgesi",
+  centerLat: 36.861,
+  centerLng: 28.198,
   defaultZoom: 13,
 } as const;
 
 export const NODES: readonly SensorNode[] = [
-  { id: 1, name: "Kızılçam Sırtı", lat: 36.9325, lng: 31.241 },
-  { id: 2, name: "Yangın Gözetleme Kulesi", lat: 36.924, lng: 31.258 },
-  { id: 3, name: "Kanyon Boğazı", lat: 36.9115, lng: 31.233 },
-  { id: 4, name: "Makilik Yamaç", lat: 36.905, lng: 31.265 },
-  { id: 5, name: "Taşağıl Çamlığı", lat: 36.892, lng: 31.221 },
-  { id: 6, name: "Ziyaretçi Vadisi", lat: 36.885, lng: 31.249 },
-  { id: 7, name: "Rüzgâr Geçidi Tepesi", lat: 36.918, lng: 31.215 },
-  { id: 8, name: "Su Bendi Mevkii", lat: 36.899, lng: 31.278 },
+  { id: 1, name: "Balan Dağı Zirve Gözetleme", lat: 36.872, lng: 28.212 },
+  { id: 2, name: "Balan Doğu Yangın Kulesi", lat: 36.8765, lng: 28.225 },
+  { id: 3, name: "Asparan Orman İçi Deposu", lat: 36.858, lng: 28.195 },
+  { id: 4, name: "Karadere Vadi Tabanı", lat: 36.852, lng: 28.188 },
+  { id: 5, name: "Bördübet Geçidi Sık Çamlığı", lat: 36.864, lng: 28.158 },
+  { id: 6, name: "Mezargediği Sarp Geçidi", lat: 36.842, lng: 28.212 },
+  { id: 7, name: "Yeşilbelde Meşe & Çamlık", lat: 36.886, lng: 28.215 },
+  { id: 8, name: "Balan Batı Zirvesi (Wokwi ESP32)", lat: 36.868, lng: 28.196 },
 ] as const;

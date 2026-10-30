@@ -9,6 +9,22 @@ export interface SensorStation {
   isHardware?: boolean; // Wokwi donanim dugumu rozeti (Dugum 31)
 }
 
+export interface GatewayInfo {
+  id: number;
+  name: string;
+  lat: number;
+  lng: number;
+  elevation: number;
+  radiusMeters: number;
+  frequency: string;
+  connectedNodes: number[];
+  rssiAvgDbm: number;
+  snrAvgDb: number;
+  packetSuccessRate: number;
+  uptime: string;
+  backhaul: string;
+}
+
 export interface TelemetryReading {
   stationId: number;
   temperature: number; // °C

@@ -1,40 +1,49 @@
+import { RadioTower } from "lucide-react";
 import maplibregl, { type Map as MapLibreMap } from "maplibre-gl";
 import type React from "react";
-import { useEffect, useRef } from "react";
-import { GATEWAYS, REGION_CENTER } from "../../services/mockEngine";
-import type { SensorStation, TelemetryReading } from "../../types/simulation";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { REGION_CENTER } from "../../services/mockEngine";
+import type { GatewayInfo, SensorStation, TelemetryReading } from "../../types/simulation";
 import { generateHuygensSpreadPolygon } from "./spreadCone";
+import { generateWindVectorFeature } from "./windVectors";
 
 interface Map3DProps {
   stations: readonly SensorStation[];
   telemetries: Map<number, TelemetryReading>;
+  gateways: readonly GatewayInfo[];
   activeFireNodeId: number | null;
   windDirection: number;
   windSpeed: number;
   showWindLayer: boolean;
   cameraFocusId: number | null;
   selectedStationId: number | null;
+  selectedGatewayId: number | null;
   onSelectStation: (id: number) => void;
+  onSelectGateway: (id: number) => void;
 }
 
 export const Map3D: React.FC<Map3DProps> = ({
   stations,
   telemetries,
+  gateways,
   activeFireNodeId,
   windDirection,
   windSpeed,
   showWindLayer,
   cameraFocusId,
   selectedStationId,
+  selectedGatewayId,
   onSelectStation,
+  onSelectGateway,
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
-  const onSelectRef = useRef(onSelectStation);
 
-  useEffect(() => {
-    onSelectRef.current = onSelectStation;
-  }, [onSelectStation]);
+  // React Marker Portalları için DOM container haritaları
+  const stationContainersRef = useRef<Map<number, HTMLDivElement>>(new Map());
+  const gatewayContainersRef = useRef<Map<number, HTMLDivElement>>(new Map());
+  const [markersReady, setMarkersReady] = useState(false);
 
   // 1. Haritayı ve 3D Terrain'i İlklendir
   useEffect(() => {
@@ -95,7 +104,7 @@ export const Map3D: React.FC<Map3DProps> = ({
       mapRef.current = map;
 
       // 1. Gateway LoRaWAN Kapsama Alanları (Draped GeoJSON)
-      const gatewayPolygons = GATEWAYS.map((gw) => {
+      const gatewayPolygons = gateways.map((gw) => {
         const points = 32;
         const coords: [number, number][] = [];
         const radiusDegLat = gw.radiusMeters / 111320;
@@ -143,61 +152,7 @@ export const Map3D: React.FC<Map3DProps> = ({
         },
       });
 
-      // 2. Gateway Radyo Kulesi Noktaları ve Etiketleri
-      const gatewayPoints = GATEWAYS.map((gw) => ({
-        type: "Feature" as const,
-        properties: { name: gw.name, id: gw.id },
-        geometry: { type: "Point" as const, coordinates: [gw.lng, gw.lat] },
-      }));
-
-      map.addSource("gateways-points", {
-        type: "geojson",
-        data: { type: "FeatureCollection", features: gatewayPoints },
-      });
-
-      map.addLayer({
-        id: "gateways-tower-glow",
-        type: "circle",
-        source: "gateways-points",
-        paint: {
-          "circle-radius": 14,
-          "circle-color": "#0284c7",
-          "circle-opacity": 0.35,
-        },
-      });
-
-      map.addLayer({
-        id: "gateways-tower-core",
-        type: "circle",
-        source: "gateways-points",
-        paint: {
-          "circle-radius": 6.5,
-          "circle-color": "#38bdf8",
-          "circle-stroke-width": 2,
-          "circle-stroke-color": "#ffffff",
-        },
-      });
-
-      map.addLayer({
-        id: "gateways-tower-label",
-        type: "symbol",
-        source: "gateways-points",
-        layout: {
-          "text-field": ["get", "name"],
-          "text-font": ["Open Sans Regular", "Arial Unicode MS Regular"],
-          "text-size": 10.5,
-          "text-offset": [0, -1.8],
-          "text-anchor": "bottom",
-          "text-allow-overlap": true,
-        },
-        paint: {
-          "text-color": "#7dd3fc",
-          "text-halo-color": "#09090b",
-          "text-halo-width": 2,
-        },
-      });
-
-      // 3. Huygens Yangın Yayılım Konisi
+      // 2. Huygens Yangın Yayılım Konisi
       map.addSource("fire-spread-cone", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
@@ -224,7 +179,7 @@ export const Map3D: React.FC<Map3DProps> = ({
         },
       });
 
-      // 4. Alarm Odaklı Rüzgâr Vektör Çizgisi
+      // 3. Alarm Odaklı Rüzgâr Vektör Çizgisi
       map.addSource("wind-vector", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
@@ -241,7 +196,7 @@ export const Map3D: React.FC<Map3DProps> = ({
         },
       });
 
-      // 5. Tüm 31 İstasyonun Rüzgâr Vektörleri Katmanı (Açılıp Kapanabilir)
+      // 4. Tüm İstasyonların 3D Aerodinamik Rüzgâr Vektörleri Katmanı
       map.addSource("all-stations-wind", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
@@ -255,155 +210,37 @@ export const Map3D: React.FC<Map3DProps> = ({
           visibility: "none",
         },
         paint: {
-          "line-color": "#f59e0b",
-          "line-width": 1.5,
-          "line-opacity": 0.75,
+          "line-color": ["get", "color"],
+          "line-width": ["get", "width"],
+          "line-opacity": 0.88,
         },
       });
 
-      // 6. 31 İstasyon Kaynağı
-      map.addSource("stations-source", {
-        type: "geojson",
-        data: { type: "FeatureCollection", features: [] },
-      });
+      // 5. HTML DOM Marker Container'larını Oluştur ve MapLibre'ye Ekle
+      for (const st of stations) {
+        const el = document.createElement("div");
+        el.className = "station-marker-root select-none pointer-events-auto";
+        new maplibregl.Marker({ element: el }).setLngLat([st.lng, st.lat]).addTo(map);
+        stationContainersRef.current.set(st.id, el);
+      }
 
-      // Dış Halka / Pulsing Glow
-      map.addLayer({
-        id: "stations-glow",
-        type: "circle",
-        source: "stations-source",
-        paint: {
-          "circle-radius": [
-            "case",
-            ["==", ["get", "riskLevel"], "fire"],
-            18,
-            ["==", ["get", "riskLevel"], "smoldering"],
-            14,
-            8,
-          ],
-          "circle-color": [
-            "case",
-            ["==", ["get", "riskLevel"], "fire"],
-            "#ef4444",
-            ["==", ["get", "riskLevel"], "smoldering"],
-            "#f59e0b",
-            "#10b981",
-          ],
-          "circle-opacity": [
-            "case",
-            ["==", ["get", "riskLevel"], "fire"],
-            0.4,
-            ["==", ["get", "riskLevel"], "smoldering"],
-            0.35,
-            0.15,
-          ],
-        },
-      });
+      for (const gw of gateways) {
+        const el = document.createElement("div");
+        el.className = "gateway-marker-root select-none pointer-events-auto";
+        new maplibregl.Marker({ element: el }).setLngLat([gw.lng, gw.lat]).addTo(map);
+        gatewayContainersRef.current.set(gw.id, el);
+      }
 
-      // İç Katı Daire (Pillar Core)
-      map.addLayer({
-        id: "stations-core",
-        type: "circle",
-        source: "stations-source",
-        paint: {
-          "circle-radius": ["case", ["get", "selected"], 9, ["get", "isHardware"], 7, 5.5],
-          "circle-color": [
-            "case",
-            ["==", ["get", "riskLevel"], "fire"],
-            "#ef4444",
-            ["==", ["get", "riskLevel"], "smoldering"],
-            "#f59e0b",
-            ["get", "isHardware"],
-            "#38bdf8",
-            "#10b981",
-          ],
-          "circle-stroke-width": ["case", ["get", "selected"], 2.5, ["get", "isHardware"], 2, 1],
-          "circle-stroke-color": ["case", ["get", "isHardware"], "#fef08a", "#ffffff"],
-        },
-      });
-
-      // İstasyon Etiketi (#ID)
-      map.addLayer({
-        id: "stations-label",
-        type: "symbol",
-        source: "stations-source",
-        layout: {
-          "text-field": [
-            "case",
-            ["get", "isHardware"],
-            ["concat", "#", ["get", "id"], " [WOKWI]"],
-            ["concat", "#", ["get", "id"]],
-          ],
-          "text-font": ["Open Sans Regular", "Arial Unicode MS Regular"],
-          "text-size": 10,
-          "text-offset": [0, -1.6],
-          "text-anchor": "bottom",
-          "text-allow-overlap": false,
-        },
-        paint: {
-          "text-color": "#e4e4e7",
-          "text-halo-color": "#09090b",
-          "text-halo-width": 1.5,
-        },
-      });
-
-      // Tıklama Olayı
-      map.on("click", "stations-core", (e) => {
-        if (!e.features || e.features.length === 0) return;
-        const id = e.features[0].properties?.id;
-        if (id !== undefined) onSelectRef.current(Number(id));
-      });
-
-      map.on("mouseenter", "stations-core", () => {
-        map.getCanvas().style.cursor = "pointer";
-      });
-      map.on("mouseleave", "stations-core", () => {
-        map.getCanvas().style.cursor = "";
-      });
+      setMarkersReady(true);
     });
 
     return () => {
       map.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, [gateways, stations]);
 
-  // 2. İstasyon Verilerini Güncelle (GeoJSON)
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map?.isStyleLoaded()) return;
-
-    const source = map.getSource("stations-source") as maplibregl.GeoJSONSource | undefined;
-    if (!source) return;
-
-    const features = stations.map((st) => {
-      const tel = telemetries.get(st.id);
-      return {
-        type: "Feature" as const,
-        properties: {
-          id: st.id,
-          name: st.name,
-          elevation: st.elevation,
-          isHardware: Boolean(st.isHardware),
-          riskLevel: tel?.riskLevel ?? "normal",
-          temp: tel?.temperature ?? 24,
-          co: tel?.co ?? 8,
-          selected: st.id === selectedStationId,
-        },
-        geometry: {
-          type: "Point" as const,
-          coordinates: [st.lng, st.lat],
-        },
-      };
-    });
-
-    source.setData({
-      type: "FeatureCollection",
-      features,
-    });
-  }, [stations, telemetries, selectedStationId]);
-
-  // 3. Yangın Yayılım Konisini ve Rüzgâr Oku Çizimini Güncelle
+  // 2. Yangın Yayılım Konisini ve Alarm Rüzgâr Çizgisini Güncelle
   useEffect(() => {
     const map = mapRef.current;
     if (!map?.isStyleLoaded()) return;
@@ -428,11 +265,11 @@ export const Map3D: React.FC<Map3DProps> = ({
       fireStation.lng,
       windDirection,
       windSpeed,
-      25, // 25 dakikalık yayılım tahmini
+      25,
     );
     coneSource.setData({ type: "FeatureCollection", features: [coneFeature] });
 
-    // Rüzgâr yön çizgisi (1.8 km ileriye doğru uzanan vektör)
+    // Rüzgâr yön çizgisi
     const rad = ((90 - windDirection) * Math.PI) / 180;
     const arrowLenMeters = 1800;
     const endLng =
@@ -458,7 +295,7 @@ export const Map3D: React.FC<Map3DProps> = ({
     });
   }, [activeFireNodeId, windDirection, windSpeed, stations]);
 
-  // 4. Tüm İstasyonların Rüzgâr Vektörlerini Güncelle ve Göster/Gizle
+  // 3. Tüm İstasyonların 3D Rüzgâr Vektörlerini Güncelle ve Göster/Gizle
   useEffect(() => {
     const map = mapRef.current;
     if (!map?.isStyleLoaded()) return;
@@ -479,28 +316,12 @@ export const Map3D: React.FC<Map3DProps> = ({
       | undefined;
     if (!allWindSource) return;
 
-    // Her istasyon için telemetrisindeki rüzgâr açısıyla 450 metrelik yön çizgisi
+    // Her istasyon için hız ve yönüne göre aerodinamik 3D ok özelliği oluştur
     const windFeatures = stations.map((st) => {
       const tel = telemetries.get(st.id);
       const dir = tel?.windDirection ?? windDirection;
       const speed = tel?.windSpeed ?? windSpeed;
-      const rad = ((90 - dir) * Math.PI) / 180;
-      const lenMeters = 300 + speed * 25; // Hıza göre uzayan ok
-      const endLng =
-        st.lng + (lenMeters * Math.cos(rad)) / (111320 * Math.cos((st.lat * Math.PI) / 180));
-      const endLat = st.lat + (lenMeters * Math.sin(rad)) / 111320;
-
-      return {
-        type: "Feature" as const,
-        properties: { id: st.id, speed },
-        geometry: {
-          type: "LineString" as const,
-          coordinates: [
-            [st.lng, st.lat],
-            [endLng, endLat],
-          ],
-        },
-      };
+      return generateWindVectorFeature(st.lat, st.lng, st.id, dir, speed);
     });
 
     allWindSource.setData({
@@ -509,7 +330,7 @@ export const Map3D: React.FC<Map3DProps> = ({
     });
   }, [showWindLayer, stations, telemetries, windDirection, windSpeed]);
 
-  // 5. Kamera Odaklanma (Sinematik flyTo)
+  // 4. Kamera Odaklanma (flyTo)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !cameraFocusId) return;
@@ -528,5 +349,126 @@ export const Map3D: React.FC<Map3DProps> = ({
     });
   }, [cameraFocusId, stations]);
 
-  return <div ref={mapContainer} className="absolute inset-0 w-full h-full bg-zinc-950" />;
+  return (
+    <div ref={mapContainer} className="absolute inset-0 w-full h-full bg-zinc-950">
+      {/* 5. React DOM Markers: İkonlar, Belirgin Numaralar, Hover ve Seçim Animasyonları */}
+      {markersReady && (
+        <>
+          {/* A. 31 Adet Siber-Fiziksel Sensör Düğümü (Node) */}
+          {stations.map((st) => {
+            const container = stationContainersRef.current.get(st.id);
+            if (!container) return null;
+
+            const tel = telemetries.get(st.id);
+            const isSelected = st.id === selectedStationId;
+            const riskLevel = tel?.riskLevel ?? "normal";
+
+            return createPortal(
+              <button
+                key={st.id}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectStation(st.id);
+                }}
+                className={`group relative flex flex-col items-center -translate-x-1/2 -translate-y-1/2 transition-transform duration-200 cursor-pointer focus:outline-none ${
+                  isSelected ? "scale-150 z-30" : "hover:scale-125 z-10"
+                }`}
+              >
+                {/* Siber-Fiziksel İstasyon Düğümü (Node İkonu) */}
+                <div
+                  className={`relative flex items-center justify-center w-6 h-6 rounded-full transition-all duration-300 ${
+                    riskLevel === "fire"
+                      ? "bg-red-950/90 border border-red-500 shadow-[0_0_12px_rgba(239,68,68,0.7)]"
+                      : riskLevel === "smoldering"
+                        ? "bg-amber-950/90 border border-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.6)]"
+                        : st.isHardware
+                          ? "bg-sky-950/90 border border-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.5)]"
+                          : "bg-zinc-950/90 border border-emerald-500/70 shadow-[0_0_6px_rgba(16,185,129,0.3)]"
+                  } ${isSelected ? "ring-2 ring-emerald-400 ring-offset-2 ring-offset-zinc-950" : ""}`}
+                >
+                  {/* Düğüm Dış Radar Dalgaları (Yangın/Tütme anında hareketli) */}
+                  {(riskLevel === "fire" || riskLevel === "smoldering") && (
+                    <span
+                      className={`absolute inset-0 rounded-full animate-ping opacity-75 ${
+                        riskLevel === "fire" ? "bg-red-500" : "bg-amber-500"
+                      }`}
+                    />
+                  )}
+
+                  {/* 4 Eksenli Mikro Düğüm Çentikleri (Teknik Görünüm) */}
+                  <span className="absolute -top-0.5 w-0.5 h-1 bg-zinc-600/80" />
+                  <span className="absolute -bottom-0.5 w-0.5 h-1 bg-zinc-600/80" />
+                  <span className="absolute -left-0.5 h-0.5 w-1 bg-zinc-600/80" />
+                  <span className="absolute -right-0.5 h-0.5 w-1 bg-zinc-600/80" />
+
+                  {/* Merkezdeki LED Sensör Çekirdeği (Core Node) */}
+                  <span
+                    className={`w-2 h-2 rounded-full transition-colors duration-200 ${
+                      riskLevel === "fire"
+                        ? "bg-red-500 shadow-[0_0_6px_#ef4444]"
+                        : riskLevel === "smoldering"
+                          ? "bg-amber-400 shadow-[0_0_6px_#f59e0b]"
+                          : st.isHardware
+                            ? "bg-sky-400 shadow-[0_0_6px_#38bdf8]"
+                            : "bg-emerald-400 shadow-[0_0_4px_#10b981]"
+                    }`}
+                  />
+                </div>
+
+                {/* Büyütülmüş ve Netleştirilmiş İstasyon Numarası Etiketi */}
+                <span className="mt-1 px-1.5 py-0.5 bg-zinc-950/95 border border-zinc-700/90 rounded-sm text-xs font-mono font-bold text-zinc-100 shadow-md flex items-center gap-1 whitespace-nowrap">
+                  <span>#{st.id}</span>
+                  {st.isHardware && (
+                    <span className="text-[10px] text-sky-400 font-semibold">[WOKWI]</span>
+                  )}
+                </span>
+              </button>,
+              container,
+            );
+          })}
+
+          {/* B. 2 Adet LoRaWAN Ağ Geçidi Kulesi (Gateway) */}
+          {gateways.map((gw) => {
+            const container = gatewayContainersRef.current.get(gw.id);
+            if (!container) return null;
+
+            const isSelected = gw.id === selectedGatewayId;
+
+            return createPortal(
+              <button
+                key={gw.id}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectGateway(gw.id);
+                }}
+                className={`group relative flex flex-col items-center -translate-x-1/2 -translate-y-1/2 transition-transform duration-200 cursor-pointer focus:outline-none ${
+                  isSelected ? "scale-150 z-30" : "hover:scale-125 z-20"
+                }`}
+              >
+                {/* Kule / Yayın İkonu */}
+                <div
+                  className={`relative flex items-center justify-center w-7 h-7 rounded-full bg-zinc-950/95 border border-sky-400 text-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.5)] transition-all duration-300 ${
+                    isSelected ? "ring-2 ring-sky-300 ring-offset-2 ring-offset-zinc-950" : ""
+                  }`}
+                >
+                  <RadioTower className="h-4 w-4" />
+                  {/* Soluk yayın dalgası */}
+                  <span className="absolute inset-0 rounded-full animate-ping opacity-35 bg-sky-400" />
+                </div>
+
+                {/* Büyütülmüş ve Netleştirilmiş Kule Etiketi */}
+                <span className="mt-1 px-1.5 py-0.5 bg-zinc-950/95 border border-sky-800/90 rounded-sm text-xs font-mono font-bold text-sky-300 shadow-md flex items-center gap-1.5 whitespace-nowrap">
+                  <span>GW-0{gw.id}</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                </span>
+              </button>,
+              container,
+            );
+          })}
+        </>
+      )}
+    </div>
+  );
 };
