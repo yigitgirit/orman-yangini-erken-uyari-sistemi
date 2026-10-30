@@ -27,6 +27,21 @@
 #define CO2_PIN 33       // Potansiyometre -> CO2 (gercek tasarimda SCD41 NDIR)
 #define PM25_PIN 36      // Potansiyometre -> PM2.5 (gercek tasarimda SPS30, yalnizca alarmda)
 #define BATTERY_PIN 35   // Potansiyometre (Wokwi) / pil gerilim bolucu (gercek kart)
+#define VANE_PIN 39      // Ruzgar gulu (potansiyometre tipi, 0-360°) - son bos ADC1 pini (VN)
+
+// ---- Ruzgar hizi ----
+// Gercek kart: kepceli anemometre her turda reed anahtarini kapatir -> darbe sayilir.
+// Yaygin modellerde (ör. SparkFun SEN-15901) 1 darbe/sn = 2.4 km/s = 0.667 m/s.
+#define ANEMOMETER_PIN 27
+#define ANEMOMETER_MS_PER_HZ 0.667f
+#define ANEMOMETER_DEBOUNCE_US 5000
+// Wokwi: darbe ureten anemometre parcasi olmadigi icin hiz bir doner kodlayiciyla
+// (KY-040) ayarlanir; dijital pinler kullanildigi icin ADC gerekmez.
+#define ENCODER_CLK_PIN 25
+#define ENCODER_DT_PIN 26
+#define WIND_SPEED_STEP 0.5f      // Kodlayicinin her adimi (m/s)
+#define WIND_SPEED_DEFAULT 3.5f   // Simulasyon baslangicinda (m/s)
+#define WIND_SPEED_MAX 30.0f
 
 // ---- Pil (gercek kart): LiPo -> 2:1 gerilim bolucu -> BATTERY_PIN ----
 #define BATTERY_DIVIDER 2.0f

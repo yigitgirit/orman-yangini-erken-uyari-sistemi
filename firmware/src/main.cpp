@@ -51,6 +51,58 @@ float readBatteryPercent() {
 #endif
 }
 
+// ---- Ruzgar ----
+#ifdef WOKWI
+// Doner kodlayici (KY-040): her adim WIND_SPEED_STEP m/s
+volatile int encoderSteps = (int)(WIND_SPEED_DEFAULT / WIND_SPEED_STEP);
+
+void IRAM_ATTR onEncoder() {
+  int steps = encoderSteps + (digitalRead(ENCODER_DT_PIN) == HIGH ? 1 : -1);
+  encoderSteps = constrain(steps, 0, (int)(WIND_SPEED_MAX / WIND_SPEED_STEP));
+}
+#else
+// Kepceli anemometre: reed anahtari darbeleri (ziplama filtresiyle) sayilir
+volatile uint32_t anemometerPulses = 0;
+volatile uint32_t lastPulseUs = 0;
+unsigned long lastWindSampleAt = 0;
+
+void IRAM_ATTR onAnemometerPulse() {
+  uint32_t now = micros();
+  if (now - lastPulseUs >= ANEMOMETER_DEBOUNCE_US) {
+    anemometerPulses = anemometerPulses + 1;
+    lastPulseUs = now;
+  }
+}
+#endif
+
+float readWindSpeed() {
+#ifdef WOKWI
+  // Kodlayicinin ayarladigi hiz + dogal dalgalanma (gercek olcum de saniyeden saniyeye oynar)
+  float t = millis() / 1000.0f;
+  float gust = 0.12f * sinf(t / 7.0f) + 0.06f * sinf(t / 2.3f);
+  return max(0.0f, encoderSteps * WIND_SPEED_STEP * (1.0f + gust));
+#else
+  // Son olcumden beri sayilan darbeler -> frekans -> m/s
+  unsigned long now = millis();
+  float seconds = (now - lastWindSampleAt) / 1000.0f;
+  lastWindSampleAt = now;
+  noInterrupts();
+  uint32_t pulses = anemometerPulses;
+  anemometerPulses = 0;
+  interrupts();
+  return seconds > 0 ? pulses / seconds * ANEMOMETER_MS_PER_HZ : 0.0f;
+#endif
+}
+
+// Meteorolojik yon: ruzgarin GELDIGI yon (0 = kuzeyden, 90 = dogudan)
+float readWindDirection() {
+  float deg = readUnit(VANE_PIN) * 360.0f;
+#ifdef WOKWI
+  deg += 6.0f * sinf(millis() / 11000.0f);  // Dogal yon salinimi
+#endif
+  return fmodf(deg + 360.0f, 360.0f);
+}
+
 void connectWiFi() {
   if (WiFi.status() == WL_CONNECTED) return;
   Serial.printf("WiFi'ye baglaniliyor: %s\n", WIFI_SSID);
@@ -103,8 +155,9 @@ Frame readSensors() {
   // PM2.5 sensoru (fanli, enerji yiyen) yalnizca alarm modunda olculur
   f.pm25 = mode == MODE_ALERT ? readScaled(PM25_PIN, 0.0f, 12.0f, 1000.0f) : NAN;
 
-  f.windSpeed = NAN;  // Bu dugumde anemometre yok
-  f.windDirection = NAN;
+  // Bu dugum ruzgar istasyonu (packages/shared/src/nodes.ts: hasAnemometer)
+  f.windSpeed = readWindSpeed();
+  f.windDirection = readWindDirection();
 
   f.battery = readBatteryPercent();
   if (f.battery < LOW_BATTERY_PERCENT) f.flags |= FLAG_LOW_BATTERY;
@@ -122,7 +175,8 @@ void sendFrame(const Frame& f) {
                 f.temperature, f.humidity, f.co, f.co2, f.vocIndex);
   if (isnan(f.pm25)) Serial.print("-");
   else Serial.printf("%.0f", f.pm25);
-  Serial.printf(" pil=%%%.0f bayrak=0x%X -> ", f.battery, f.flags);
+  Serial.printf(" ruzgar=%.1fm/s %.0f° pil=%%%.0f bayrak=0x%X -> ", f.windSpeed, f.windDirection, f.battery,
+                f.flags);
   for (size_t i = 0; i < FRAME_SIZE; i++) Serial.printf("%02X", buf[i]);
   Serial.println(ok ? " gonderildi" : " GONDERILEMEDI");
 }
@@ -132,6 +186,15 @@ void setup() {
   dht.begin();
   analogReadResolution(12);
   analogSetAttenuation(ADC_11db);  // 0-3.3V
+#ifdef WOKWI
+  pinMode(ENCODER_CLK_PIN, INPUT_PULLUP);
+  pinMode(ENCODER_DT_PIN, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(ENCODER_CLK_PIN), onEncoder, FALLING);
+#else
+  pinMode(ANEMOMETER_PIN, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(ANEMOMETER_PIN), onAnemometerPulse, FALLING);
+  lastWindSampleAt = millis();
+#endif
   connectWiFi();
   Serial.printf("Dugum %d -> %s:%d (UDP)\n", NODE_ID, GATEWAY_HOST, GATEWAY_UDP_PORT);
 }

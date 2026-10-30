@@ -38,8 +38,23 @@ const fireDelayS = Number(process.env.FIRE_DELAY_S ?? 60);
 const fireSpeed = Number(process.env.FIRE_SPEED ?? 1);
 const startedAt = Date.now();
 
-/** Bolgesel ruzgar: guneybatidan (225°) ~3.5 m/s */
-const WIND = { speed: 3.5, fromDeg: 225 };
+// --- Canli ruzgar modeli -----------------------------------------------------
+// Bolgesel ruzgar ortalamada guneybatidan (225°) ~3.5 m/s esiyor. Yon ve hiz ortalamaya
+// cekilen rastgele yuruyusle (Ornstein-Uhlenbeck) yavasca kayar, ara sira hamle (gust) gelir.
+// Istasyonlar arazi etkisiyle (kanyon/sirt) sabit bir yon sapmasi ve hiz katsayisi gorur.
+const WIND_MEAN = { speed: 3.5, fromDeg: 225 };
+const WIND = { speed: WIND_MEAN.speed, fromDeg: WIND_MEAN.fromDeg };
+let baseSpeed = WIND_MEAN.speed;
+let gust = 0;
+
+function updateWind(dtS: number): void {
+  const angleDiff = ((WIND_MEAN.fromDeg - WIND.fromDeg + 540) % 360) - 180;
+  WIND.fromDeg = (WIND.fromDeg + 0.02 * angleDiff * dtS + rand(6) * Math.sqrt(dtS) + 360) % 360;
+  baseSpeed += 0.05 * (WIND_MEAN.speed - baseSpeed) * dtS + rand(0.6) * Math.sqrt(dtS);
+  if (Math.random() < 0.03 * dtS) gust = 1.5 + Math.random() * 3; // ~30 sn'de bir hamle
+  gust *= Math.exp(-dtS / 4); // hamle ~4 sn'de soner
+  WIND.speed = Math.max(0.2, baseSpeed + gust);
+}
 
 // --- Enerji modeli ---------------------------------------------------------
 // Alarm modunda PM2.5 fani acilir ve gonderim sikligi 5 kat artar -> pil hizla duser.
@@ -59,6 +74,7 @@ interface NodeState {
     vocIndex: number;
     pm25: number;
   };
+  terrain: { dirOffset: number; speedFactor: number }; // Istasyonun arazi etkisi
   battery: number;
   mode: NodeMode;
   lastAnomalyAt: number;
@@ -77,6 +93,7 @@ const states: NodeState[] = NODES.filter((n) => n.source === NodeSource.Sim).map
     vocIndex: 100 + rand(10),
     pm25: 12 + rand(6),
   },
+  terrain: { dirOffset: rand(40), speedFactor: 0.75 + Math.random() * 0.5 },
   battery: 70 + Math.random() * 30,
   mode: NodeMode.Normal,
   lastAnomalyAt: 0,
@@ -136,8 +153,12 @@ function readSensor(s: NodeState, now: number): PyrosFrame {
     vocIndex: Math.max(1, vocIndex),
     pm25:
       s.mode === NodeMode.Alert ? Math.max(0, s.base.pm25 + e.pm25 * plume.gas + rand(4)) : null,
-    windSpeed: s.node.hasAnemometer ? WIND.speed + rand(1) : null,
-    windDirection: s.node.hasAnemometer ? WIND.fromDeg + rand(20) : null,
+    windSpeed: s.node.hasAnemometer
+      ? Math.max(0, WIND.speed * s.terrain.speedFactor + rand(0.6))
+      : null,
+    windDirection: s.node.hasAnemometer
+      ? (WIND.fromDeg + s.terrain.dirOffset + rand(10) + 360) % 360
+      : null,
     battery: s.battery,
     flags: s.battery < THRESHOLDS.lowBattery ? StatusFlag.LowBattery : StatusFlag.None,
   };
@@ -150,6 +171,7 @@ setInterval(() => {
   const now = Date.now();
   const dtS = (now - lastTick) / 1000;
   lastTick = now;
+  updateWind(dtS);
 
   for (const s of states) {
     if (s.battery <= 0) continue; // pili biten dugum susar
@@ -168,7 +190,8 @@ setInterval(() => {
     const alerts = states.filter((s) => s.mode === NodeMode.Alert).length;
     const minBattery = Math.min(...states.map((s) => s.battery));
     console.log(
-      `[sensor-sim] son 5 sn: ${sent} paket | alarm modunda: ${alerts} dugum | en dusuk pil: %${minBattery.toFixed(1)}`,
+      `[sensor-sim] son 5 sn: ${sent} paket | alarm modunda: ${alerts} dugum | en dusuk pil: %${minBattery.toFixed(1)} | ` +
+        `ruzgar ${WIND.speed.toFixed(1)} m/s, ${WIND.fromDeg.toFixed(0)}° yonunden`,
     );
     sent = 0;
     lastLog = now;

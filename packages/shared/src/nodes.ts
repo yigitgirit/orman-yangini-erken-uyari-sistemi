@@ -52,14 +52,14 @@ function buildGrid(): SensorNode[] {
   return nodes;
 }
 
-/** Wokwi düğümü ızgaranın doğu kenarında, D satırı hizasında */
+/** Wokwi düğümü ızgaranın doğu kenarında, D satırı hizasında; rüzgâr istasyonu (rüzgâr gülü + anemometre) */
 const WOKWI_NODE: SensorNode = {
   id: 50,
   name: "ESP32 (Wokwi)",
   lat: REGION_INFO.centerLat,
   lng: REGION_INFO.centerLng + (4 * GRID_SPACING_M) / mPerDegLng(REGION_INFO.centerLat),
   source: NodeSource.Wokwi,
-  hasAnemometer: false,
+  hasAnemometer: true,
 };
 
 export const NODES: readonly SensorNode[] = [...buildGrid(), WOKWI_NODE];

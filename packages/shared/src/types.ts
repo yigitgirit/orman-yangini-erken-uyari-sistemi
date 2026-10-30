@@ -58,9 +58,38 @@ export interface ImpactSummary {
   preventedCo2Tons: number;
 }
 
+/**
+ * Rüzgâr vektörü. Yön kuralları (karışmaması için ikisi de verilir):
+ * - directionFrom: meteorolojik yön, rüzgârın GELDİĞİ yön (225 = güneybatıdan)
+ * - directionTo:   akış yönü, okun GÖSTERDİĞİ yön (= directionFrom + 180)
+ * - u / v:         akış bileşenleri, m/s (u: doğuya +, v: kuzeye +) - 3B ok için doğrudan kullanılabilir
+ */
+export interface WindVector {
+  speed: number; // m/s
+  directionFrom: number; // derece, kuzey = 0, saat yönünde
+  directionTo: number; // derece
+  u: number;
+  v: number;
+}
+
+/** Bir düğümdeki rüzgâr: istasyonsa ölçüm, değilse istasyonlardan tahmin (IDW) */
+export interface NodeWind extends WindVector {
+  nodeId: number;
+  measured: boolean;
+}
+
+/** Backend'in ~2 sn'de bir yayınladığı rüzgâr alanı */
+export interface WindField {
+  updatedAt: string;
+  stationCount: number; // Son 60 sn'de ölçüm gönderen istasyon sayısı
+  regional: WindVector; // Tüm istasyonların vektör ortalaması
+  nodes: NodeWind[]; // Her düğüm için (50 düğüm)
+}
+
 /** Backend -> Web WebSocket mesajları (discriminated union) */
 export type WsMessage =
   | { type: "nodes"; data: readonly SensorNode[] }
   | { type: "telemetry"; data: TelemetryMessage }
   | { type: "risk"; data: NodeRisk }
-  | { type: "impact"; data: ImpactSummary };
+  | { type: "impact"; data: ImpactSummary }
+  | { type: "wind"; data: WindField };

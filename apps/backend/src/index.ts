@@ -18,6 +18,10 @@ import {
 import mqtt from "mqtt";
 import { WebSocket, WebSocketServer } from "ws";
 import { analyze } from "./analysis.ts";
+import { recordWind, windField } from "./wind.ts";
+
+/** Rüzgâr alanı yayın aralığı (frontend'de 3B rüzgâr okları için) */
+const WIND_BROADCAST_MS = 2000;
 
 // --- WebSocket sunucusu -------------------------------------------------------
 const wss = new WebSocketServer({ port: WS_PORT });
@@ -25,10 +29,12 @@ wss.on("listening", () => console.log(`[backend] WebSocket dinleniyor: ws://loca
 
 const impact: ImpactSummary = { detectedFires: 0, savedHectares: 0, preventedCo2Tons: 0 };
 
-// Yeni bağlanan istemci önce düğüm listesini ve güncel etkiyi alır
+// Yeni bağlanan istemci önce düğüm listesini, güncel etkiyi ve rüzgâr alanını alır
 wss.on("connection", (ws) => {
   ws.send(JSON.stringify({ type: "nodes", data: NODES } satisfies WsMessage));
   ws.send(JSON.stringify({ type: "impact", data: impact } satisfies WsMessage));
+  const wind = windField();
+  if (wind) ws.send(JSON.stringify({ type: "wind", data: wind } satisfies WsMessage));
 });
 
 function broadcast(message: WsMessage): void {
@@ -58,6 +64,12 @@ function trackImpact(nodeId: number, level: RiskLevel, at: string): void {
   broadcast({ type: "impact", data: impact });
 }
 
+// --- Rüzgâr alanı yayını --------------------------------------------------------
+setInterval(() => {
+  const wind = windField();
+  if (wind) broadcast({ type: "wind", data: wind });
+}, WIND_BROADCAST_MS);
+
 // --- MQTT abonesi -------------------------------------------------------------
 const client = mqtt.connect(MQTT_URL);
 client.on("connect", () => {
@@ -69,6 +81,7 @@ client.on("error", (err) => console.error("[backend] MQTT hatasi:", err.message)
 client.on("message", (_topic, payload) => {
   try {
     const telemetry = JSON.parse(payload.toString()) as TelemetryMessage;
+    recordWind(telemetry);
     const risk = analyze(telemetry);
     broadcast({ type: "telemetry", data: telemetry });
     broadcast({ type: "risk", data: risk });

@@ -9,7 +9,9 @@
     { "type": "wokwi-potentiometer", "id": "voc", "top": -110, "left": -230, "attrs": {} },
     { "type": "wokwi-potentiometer", "id": "co2", "top": -10, "left": -230, "attrs": {} },
     { "type": "wokwi-potentiometer", "id": "pm25", "top": 90, "left": -230, "attrs": {} },
-    { "type": "wokwi-potentiometer", "id": "battery", "top": 190, "left": -230, "attrs": {} }
+    { "type": "wokwi-potentiometer", "id": "battery", "top": 190, "left": -230, "attrs": {} },
+    { "type": "wokwi-potentiometer", "id": "vane", "top": 330, "left": -230, "attrs": {} },
+    { "type": "wokwi-ky-040", "id": "wind", "top": 330, "left": 160, "attrs": {} }
   ],
   "connections": [
     [ "esp:TX", "$serialMonitor:RX", "", [] ],
@@ -31,7 +33,14 @@
     [ "pm25:SIG", "esp:VP", "gray", [] ],
     [ "battery:VCC", "esp:3V3", "red", [] ],
     [ "battery:GND", "esp:GND.1", "black", [] ],
-    [ "battery:SIG", "esp:35", "yellow", [] ]
+    [ "battery:SIG", "esp:35", "yellow", [] ],
+    [ "vane:VCC", "esp:3V3", "red", [] ],
+    [ "vane:GND", "esp:GND.1", "black", [] ],
+    [ "vane:SIG", "esp:VN", "cyan", [] ],
+    [ "wind:VCC", "esp:3V3", "red", [] ],
+    [ "wind:GND", "esp:GND.2", "black", [] ],
+    [ "wind:CLK", "esp:25", "green", [] ],
+    [ "wind:DT", "esp:26", "violet", [] ]
   ],
   "dependencies": {}
 }
