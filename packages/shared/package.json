@@ -5,9 +5,13 @@
   "description": "PyrosEco shared types, PyrosFrame binary protocol, and utilities",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./env": "./src/env.ts"
   },
   "scripts": {
     "typecheck": "tsc"
+  },
+  "dependencies": {
+    "zod": "^3.24.2"
   }
 }

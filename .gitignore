@@ -1,6 +1,7 @@
 node_modules/
 dist/
 *.log
+*.tsbuildinfo
 .env
 .env.*
 !.env.example
@@ -11,3 +12,14 @@ dist/
 *.swp
 *.swo
 .DS_Store
+
+# Firmware (PlatformIO)
+firmware/.pio/
+firmware/include/secrets.h
+
+# TLS / SSL Sertifikalari
+apps/backend/certs/
+*.pem
+
+# Surec PID dosyalari
+.pids/
