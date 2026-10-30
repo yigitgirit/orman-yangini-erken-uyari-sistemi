@@ -1,0 +1,28 @@
+{
+  "name": "pyroseco",
+  "private": true,
+  "version": "0.1.0",
+  "description": "PyrosEco - IoT-based early wildfire detection and environmental emission monitoring system",
+  "type": "module",
+  "packageManager": "pnpm@11.28.5",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "broker:up": "docker compose up -d",
+    "broker:down": "docker compose down",
+    "broker:logs": "docker compose logs -f mosquitto",
+    "dev:sensor": "pnpm --filter @pyros/sensor-sim dev",
+    "dev:gateway": "pnpm --filter @pyros/gateway dev",
+    "dev:backend": "pnpm --filter @pyros/backend dev",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "check": "biome check --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.4",
+    "@types/node": "^24.19.2",
+    "typescript": "^7.0.2"
+  }
+}

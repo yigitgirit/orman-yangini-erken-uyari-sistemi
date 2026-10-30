@@ -1,0 +1,16 @@
+{
+  "name": "@pyros/gateway",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Layer 2: UDP listener and MQTT publisher (edge gateway)",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/index.ts",
+    "start": "node src/index.ts",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "@pyros/shared": "workspace:*",
+    "mqtt": "^5.16.1"
+  }
+}
