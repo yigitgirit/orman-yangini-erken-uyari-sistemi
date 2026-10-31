@@ -1,14 +1,47 @@
 // Katman 2: Saha Ag Gecidi (Edge Gateway / LoRaWAN simulasyonu)
-// UDP :5005 -> PyrosFrame coz -> JSON -> MQTT sensors/{id}/telemetry
+// UDP :5005 -> PyrosFrame v3 muhrunu dogrula (AES-128-CCM) -> JSON -> MQTT sensors/{id}/telemetry
+// Yalnizca kendi anahtariyla muhurlenmis, sayaci ileri giden paketler iletilir; gerisi sebebiyle sayilip atilir.
 //
-// Calistirma: pnpm dev:gateway  (once: pnpm broker:up)
+// Calistirma: pnpm dev:gateway  (once: pnpm broker:up, pnpm keys)
 
 import "@pyros/shared/env";
 import dgram from "node:dgram";
-import { MQTT_TOPICS, MQTT_URL, type TelemetryMessage, UDP_PORT, unpackFrame } from "@pyros/shared";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import {
+  MQTT_CREDENTIALS,
+  MQTT_TOPICS,
+  MQTT_URL,
+  NODES,
+  type TelemetryMessage,
+  UDP_PORT,
+} from "@pyros/shared";
+import {
+  deriveNodeKey,
+  FrameRejected,
+  loadMasterKey,
+  openFrame,
+  peekHeader,
+  RejectReason,
+} from "@pyros/shared/secure";
 import mqtt from "mqtt";
 
-const client = mqtt.connect(MQTT_URL);
+const masterKey = loadMasterKey();
+const nodeKeys = new Map(NODES.map((n) => [n.id, deriveNodeKey(masterKey, n.id)]));
+
+// Tekrar korumasi: her dugumun kabul edilen son sayaci. Gateway yeniden baslasa da eski
+// paketler kabul edilmesin diye dosyada tutulur.
+const COUNTERS_FILE = resolve(import.meta.dirname, "../.sayaclar.json");
+const lastCounter = new Map<number, number>(
+  existsSync(COUNTERS_FILE)
+    ? Object.entries(JSON.parse(readFileSync(COUNTERS_FILE, "utf8")) as Record<string, number>).map(
+        ([id, c]) => [Number(id), c],
+      )
+    : [],
+);
+let countersDirty = false;
+
+const client = mqtt.connect(MQTT_URL, MQTT_CREDENTIALS.gateway);
 client.on("connect", () => console.log(`[gateway] MQTT baglandi: ${MQTT_URL}`));
 client.on("error", (err) => console.error("[gateway] MQTT hatasi:", err.message));
 
@@ -16,35 +49,70 @@ const socket = dgram.createSocket("udp4");
 
 // 5 sn'lik paket sayaci: gecerli paketler sessizce iletildigi icin UDP akisini gorunur kilar
 const STATS_INTERVAL_MS = 5000;
-const stats = { valid: 0, invalid: 0, nodes: new Set<number>(), last: "" };
+const MAX_REJECT_LOGS = 5; // Sel saldirisinda konsolu bogmamak icin 5 sn'de en fazla bu kadar satir
+const stats = {
+  valid: 0,
+  rejected: new Map<RejectReason, number>(),
+  rejectLogs: 0,
+  nodes: new Set<number>(),
+  last: "",
+};
 
 setInterval(() => {
-  if (stats.valid || stats.invalid) {
+  const rejected = [...stats.rejected.values()].reduce((a, b) => a + b, 0);
+  if (stats.valid || rejected) {
+    const reasons = [...stats.rejected].map(([r, n]) => `${n} ${r}`).join(", ");
     console.log(
-      `[gateway] son 5 sn: ${stats.valid} gecerli, ${stats.invalid} gecersiz paket | ` +
+      `[gateway] son 5 sn: ${stats.valid} gecerli, ${rejected} REDDEDILDI${reasons ? ` (${reasons})` : ""} | ` +
         `${stats.nodes.size} dugum | son: ${stats.last}`,
     );
   }
   stats.valid = 0;
-  stats.invalid = 0;
+  stats.rejected.clear();
+  stats.rejectLogs = 0;
   stats.nodes.clear();
+  if (countersDirty) {
+    writeFileSync(COUNTERS_FILE, JSON.stringify(Object.fromEntries(lastCounter)));
+    countersDirty = false;
+  }
 }, STATS_INTERVAL_MS);
+
+function verify(msg: Buffer) {
+  const { nodeId } = peekHeader(msg);
+  const key = nodeKeys.get(nodeId);
+  if (!key) throw new FrameRejected(RejectReason.UnknownNode, `dugum ${nodeId} kayitli degil`);
+  const { frame, counter } = openFrame(msg, key);
+  // Sayac yalnizca muhur dogrulandiktan sonra kontrol edilir: sahte paket sayaci ilerletemez
+  const last = lastCounter.get(nodeId) ?? -1;
+  if (counter <= last) {
+    throw new FrameRejected(RejectReason.Replay, `dugum ${nodeId} sayac ${counter} <= son ${last}`);
+  }
+  lastCounter.set(nodeId, counter);
+  countersDirty = true;
+  return frame;
+}
 
 socket.on("message", (msg, rinfo) => {
   try {
-    const frame = unpackFrame(msg);
+    const frame = verify(msg);
     const telemetry: TelemetryMessage = { ...frame, receivedAt: new Date().toISOString() };
     client.publish(MQTT_TOPICS.telemetry(frame.nodeId), JSON.stringify(telemetry));
     stats.valid++;
     stats.nodes.add(frame.nodeId);
-    stats.last = `dugum ${frame.nodeId} <- ${rinfo.address}:${rinfo.port} (${msg.toString("hex")})`;
+    stats.last = `dugum ${frame.nodeId} <- ${rinfo.address}:${rinfo.port}`;
   } catch (err) {
-    stats.invalid++;
-    console.warn(
-      `[gateway] gecersiz paket (${rinfo.address}:${rinfo.port}):`,
-      (err as Error).message,
-    );
+    const reason = err instanceof FrameRejected ? err.reason : RejectReason.Seal;
+    stats.rejected.set(reason, (stats.rejected.get(reason) ?? 0) + 1);
+    if (stats.rejectLogs++ < MAX_REJECT_LOGS) {
+      console.warn(
+        `[gateway] REDDEDILDI [${reason}] ${rinfo.address}:${rinfo.port}: ${(err as Error).message}`,
+      );
+    }
   }
 });
 
-socket.bind(UDP_PORT, () => console.log(`[gateway] UDP dinleniyor: :${UDP_PORT}`));
+socket.bind(UDP_PORT, () =>
+  console.log(
+    `[gateway] UDP dinleniyor: :${UDP_PORT} (yalnizca AES-128-CCM muhurlu PyrosFrame v3)`,
+  ),
+);

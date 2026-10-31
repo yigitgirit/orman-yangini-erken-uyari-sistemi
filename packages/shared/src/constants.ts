@@ -9,6 +9,12 @@ export const UDP_HOST = env.UDP_HOST ?? "127.0.0.1";
 /** Mosquitto (docker-compose.yml) */
 export const MQTT_URL = env.MQTT_URL ?? "mqtt://localhost:1883";
 
+/** Servis başına MQTT hesabı (yetkiler: mosquitto/config/acl, şifreler: .env -> pnpm mqtt:users) */
+export const MQTT_CREDENTIALS = {
+  gateway: { username: "gateway", password: env.MQTT_GATEWAY_PASSWORD },
+  backend: { username: "backend", password: env.MQTT_BACKEND_PASSWORD },
+} as const;
+
 /** Backend -> Web WebSocket portu */
 export const WS_PORT = env.WS_PORT ? Number(env.WS_PORT) : 8080;
 

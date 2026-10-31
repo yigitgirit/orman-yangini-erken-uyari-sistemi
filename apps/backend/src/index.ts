@@ -7,6 +7,7 @@ import "@pyros/shared/env";
 import {
   CO2_MODEL,
   type ImpactSummary,
+  MQTT_CREDENTIALS,
   MQTT_TOPICS,
   MQTT_URL,
   NODES,
@@ -135,7 +136,7 @@ setInterval(() => {
 }, WIND_BROADCAST_MS);
 
 // --- MQTT abonesi -------------------------------------------------------------
-const client = mqtt.connect(MQTT_URL);
+const client = mqtt.connect(MQTT_URL, MQTT_CREDENTIALS.backend);
 client.on("connect", () => {
   console.log(`[backend] MQTT bağlandı: ${MQTT_URL}`);
   client.subscribe(MQTT_TOPICS.telemetryWildcard);

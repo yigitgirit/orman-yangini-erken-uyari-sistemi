@@ -1,0 +1,8 @@
+# PyrosEco - MQTT konu yetkileri
+# Sensör verisini yalnızca gateway yazar, backend yalnızca okur. Listede olmayan her şey yasak.
+
+user gateway
+topic write sensors/+/telemetry
+
+user backend
+topic read sensors/+/telemetry
