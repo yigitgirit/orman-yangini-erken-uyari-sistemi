@@ -3,8 +3,8 @@ services:
     image: eclipse-mosquitto:2
     container_name: pyros-mosquitto
     ports:
-      - "1883:1883" # MQTT
-      - "9001:9001" # MQTT over WebSocket (opsiyonel)
+      - "127.0.0.1:1883:1883" # MQTT, yalnizca bu bilgisayardan
     volumes:
-      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      # mosquitto.conf + acl + passwd (passwd: pnpm mqtt:users)
+      - ./mosquitto/config:/mosquitto/config:ro
     restart: unless-stopped

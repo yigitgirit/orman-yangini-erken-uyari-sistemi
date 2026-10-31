@@ -1,6 +1,7 @@
 // Katman 1: Sensor Simulatoru (Dijital Ikiz)
 // Antalya Manavgat - Oymapinar Yangin Sahasi (28 Temmuz 2021 Gercek Senaryo Modeli)
-// 49 izgara dugumu icin okuma uretir -> PyrosFrame v2 (16 bayt) -> UDP :5005
+// 49 izgara dugumu icin okuma uretir -> PyrosFrame v3 (AES-128-CCM muhurlu, 29 bayt) -> UDP :5005
+// Her dugum kendi anahtarini ana anahtardan (.env PYROS_MASTER_KEY) turetir; sayaci saatle ilerler.
 // (50 numarali dugum Oymapinar Seyir ESP32 donanim dugumudur.)
 //
 // Calistirma: pnpm dev:sensor
@@ -26,7 +27,6 @@ import {
   NodeMode,
   NodeSource,
   type PyrosFrame,
-  packFrame,
   SENSOR_INTERVAL_MS,
   type SensorNode,
   StatusFlag,
@@ -34,6 +34,7 @@ import {
   UDP_HOST,
   UDP_PORT,
 } from "@pyros/shared";
+import { counterBase, deriveNodeKey, loadMasterKey, sealFrame } from "@pyros/shared/secure";
 
 const socket = dgram.createSocket("udp4");
 
@@ -95,9 +96,12 @@ interface NodeState {
   mode: NodeMode;
   lastAnomalyAt: number;
   nextSendAt: number;
+  key: Buffer; // AES-128-CCM dugum anahtari
+  counter: number; // Her pakette artar (gateway tekrar korumasi)
 }
 
 const rand = (n: number) => (Math.random() - 0.5) * n;
+const masterKey = loadMasterKey();
 
 const states: NodeState[] = NODES.filter((n) => n.source === NodeSource.Sim).map((node) => ({
   node,
@@ -114,6 +118,8 @@ const states: NodeState[] = NODES.filter((n) => n.source === NodeSource.Sim).map
   mode: NodeMode.Normal,
   lastAnomalyAt: 0,
   nextSendAt: Date.now() + Math.random() * SENSOR_INTERVAL_MS.normal, // gonderimleri dagit
+  key: deriveNodeKey(masterKey, node.id),
+  counter: 0,
 }));
 
 /** Kaynaktaki emisyon profili (t: atesten beri gecen dakika) */
@@ -195,7 +201,9 @@ setInterval(() => {
     if (now < s.nextSendAt) continue;
 
     const frame = readSensor(s, now);
-    socket.send(packFrame(frame), UDP_PORT, UDP_HOST);
+    // Sayac saatle birlikte ilerler (en az +1): yeniden baslatmada ve demoda hep ileri gider
+    s.counter = Math.max(s.counter + 1, counterBase(now));
+    socket.send(sealFrame(frame, s.counter, s.key), UDP_PORT, UDP_HOST);
     s.battery = Math.max(0, s.battery - BATTERY_COST.perPacket);
     s.nextSendAt =
       now + (s.mode === NodeMode.Alert ? SENSOR_INTERVAL_MS.alert : SENSOR_INTERVAL_MS.normal);

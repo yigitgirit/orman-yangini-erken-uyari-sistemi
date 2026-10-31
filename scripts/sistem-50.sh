@@ -22,7 +22,13 @@ echo "=============================================="
 echo "🔥 PyrosEco - Manavgat / Oymapınar Yangın Sahası"
 echo "=============================================="
 
-# 1. Mosquitto Broker kontrolü / başlatma
+# 1. Mosquitto Broker kontrolü / başlatma (kilitli: kullanıcılar .env'den)
+if [ ! -f "$DIR/mosquitto/config/passwd" ]; then
+  node "$DIR/scripts/mqtt-kullanicilar.ts"
+fi
+if [ ! -f "$DIR/firmware/include/node_key.h" ]; then
+  node "$DIR/scripts/anahtarlar.ts"
+fi
 if ! docker ps 2>/dev/null | grep -q "pyros-mosquitto"; then
   echo "[1/4] MQTT Broker (Mosquitto) başlatılıyor..."
   docker compose up -d 2>/dev/null || echo "[!] Docker kontrol edilemedi, yerel broker bekleniyor..."

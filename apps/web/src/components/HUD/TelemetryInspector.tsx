@@ -522,7 +522,7 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
                   <div className="flex justify-between items-center pt-2">
                     <span className="text-zinc-400">İletişim Protokolü</span>
                     <span className="text-sky-300 font-mono">
-                      PyrosFrame v2 (16 Bayt İkili Çerçeve)
+                      PyrosFrame v3 (AES-128-CCM, 29B)
                     </span>
                   </div>
                 </div>
@@ -562,7 +562,7 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
             </span>
           </div>
           <span className="font-mono text-[11px] text-zinc-500">
-            {currentTelemetry ? "CRC-8: DOĞRULANDI" : "LİNK: BEKLEMEDE"}
+            {currentTelemetry ? "AES-128-CCM: MÜHÜRLÜ" : "LİNK: BEKLEMEDE"}
           </span>
         </DrawerFooter>
       </DrawerContent>

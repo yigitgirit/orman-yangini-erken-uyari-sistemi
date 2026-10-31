@@ -1,4 +1,5 @@
 // PyrosFrame v2: 16 baytlık ikili çerçeve (LoRa yük sınırına uygun)
+// Ağda tek başına gönderilmez: secure.ts ilk 15 baytını AES-128-CCM ile şifreleyip v3 olarak mühürler.
 //
 // | Bayt  | Alan          | Kodlama                                                   |
 // |-------|---------------|-----------------------------------------------------------|
