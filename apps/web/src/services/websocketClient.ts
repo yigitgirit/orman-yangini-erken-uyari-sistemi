@@ -1,4 +1,5 @@
 import {
+  type GatewayInfo,
   type ImpactSummary,
   type NodeRisk,
   type SensorNode,
@@ -13,6 +14,7 @@ export type ConnectionStatus = "connecting" | "connected" | "disconnected";
 
 type StatusListener = (status: ConnectionStatus) => void;
 type NodesListener = (nodes: readonly SensorNode[]) => void;
+type GatewaysListener = (gateways: readonly GatewayInfo[]) => void;
 type TelemetryListener = (telemetry: TelemetryMessage) => void;
 type RiskListener = (risk: NodeRisk) => void;
 type ImpactListener = (impact: ImpactSummary) => void;
@@ -28,6 +30,7 @@ export class LiveWebSocketClient {
 
   private statusListeners = new Set<StatusListener>();
   private nodesListeners = new Set<NodesListener>();
+  private gatewaysListeners = new Set<GatewaysListener>();
   private telemetryListeners = new Set<TelemetryListener>();
   private riskListeners = new Set<RiskListener>();
   private impactListeners = new Set<ImpactListener>();
@@ -74,6 +77,9 @@ export class LiveWebSocketClient {
           switch (msg.type) {
             case "nodes":
               for (const l of this.nodesListeners) l(msg.data);
+              break;
+            case "gateways":
+              for (const l of this.gatewaysListeners) l(msg.data);
               break;
             case "telemetry":
               for (const l of this.telemetryListeners) l(msg.data);
@@ -154,6 +160,11 @@ export class LiveWebSocketClient {
   public onNodes(l: NodesListener): () => void {
     this.nodesListeners.add(l);
     return () => this.nodesListeners.delete(l);
+  }
+
+  public onGateways(l: GatewaysListener): () => void {
+    this.gatewaysListeners.add(l);
+    return () => this.gatewaysListeners.delete(l);
   }
 
   public onTelemetry(l: TelemetryListener): () => void {

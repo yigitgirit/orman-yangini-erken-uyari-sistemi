@@ -6,6 +6,7 @@
 import "@pyros/shared/env";
 import {
   CO2_MODEL,
+  GATEWAYS,
   type ImpactSummary,
   MQTT_TOPICS,
   MQTT_URL,
@@ -76,6 +77,7 @@ wss.on("connection", (rawWs) => {
 
   // İlk durum aktarımı
   ws.send(JSON.stringify({ type: "nodes", data: NODES } satisfies WsMessage));
+  ws.send(JSON.stringify({ type: "gateways", data: GATEWAYS } satisfies WsMessage));
   ws.send(JSON.stringify({ type: "impact", data: impact } satisfies WsMessage));
   const wind = windField();
   if (wind) ws.send(JSON.stringify({ type: "wind", data: wind } satisfies WsMessage));

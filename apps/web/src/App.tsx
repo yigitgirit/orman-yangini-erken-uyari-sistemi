@@ -8,12 +8,12 @@ import { TopStatusBar } from "./components/HUD/TopStatusBar";
 import { Map3D } from "./components/Map/Map3D";
 import { useInspectorSelection } from "./hooks/useInspectorSelection";
 import { usePyrosData } from "./hooks/usePyrosData";
-import { GATEWAYS } from "./services/mockEngine";
 
 export const App: React.FC = () => {
-  // 1. Canlı Telemetri ve Veri Katmanı Hook'u
+  // 1. Canlı Telemetri ve Veri Katmanı Hook'u (Backend'den Canlı Akış)
   const {
     nodes,
+    gateways,
     telemetries,
     risks,
     telemetryHistory,
@@ -64,7 +64,7 @@ export const App: React.FC = () => {
   const currentRisk = selectedStationId ? (risks.get(selectedStationId) ?? null) : null;
   const currentHistory = selectedStationId ? (telemetryHistory.get(selectedStationId) ?? []) : [];
 
-  const currentGateway = GATEWAYS.find((g) => g.id === selectedGatewayId) ?? null;
+  const currentGateway = gateways.find((g) => g.id === selectedGatewayId) ?? null;
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-zinc-950 font-sans select-none">
@@ -87,7 +87,7 @@ export const App: React.FC = () => {
         stations={nodes}
         telemetries={telemetries}
         risks={risks}
-        gateways={GATEWAYS}
+        gateways={gateways}
         activeFireNodeId={activeFireNodeId}
         windDirection={windDirection}
         windSpeed={windSpeed}

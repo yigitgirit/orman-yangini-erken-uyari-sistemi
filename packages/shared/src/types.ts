@@ -2,6 +2,7 @@
 import type { z } from "zod";
 import type {
   FireStageSchema,
+  GatewayInfoSchema,
   ImpactSummarySchema,
   NodeRiskSchema,
   NodeWindSchema,
@@ -16,6 +17,7 @@ import type {
 } from "./schemas.ts";
 
 export type SensorNode = z.infer<typeof SensorNodeSchema>;
+export type GatewayInfo = z.infer<typeof GatewayInfoSchema>;
 export type TelemetryMessage = z.infer<typeof TelemetryMessageSchema>;
 export type RiskLevel = z.infer<typeof RiskLevelSchema>;
 export type FireStage = z.infer<typeof FireStageSchema>;

@@ -1,0 +1,51 @@
+// Manavgat / Oymapınar Barajı ve Toros Sırtları LoRaWAN Ağ Geçidi Kuleleri
+import type { GatewayInfo } from "./types.ts";
+
+export const GATEWAYS: readonly GatewayInfo[] = [
+  {
+    id: 1,
+    name: "GW-01 Oymapınar Zirve Röle Kulesi",
+    lat: 36.908,
+    lng: 31.542,
+    elevation: 840,
+    radiusMeters: 5200,
+    frequency: "EU868 (8 Kanal)",
+    connectedNodes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 50],
+    rssiAvgDbm: -88,
+    snrAvgDb: 9.6,
+    packetSuccessRate: 99.9,
+    uptime: "48g 14s 20dk",
+    backhaul: "4G LTE Cat-M1 / Güneş Paneli + LiFePO4",
+  },
+  {
+    id: 2,
+    name: "GW-02 Tilkiler Tepe Röle Kulesi",
+    lat: 36.884,
+    lng: 31.528,
+    elevation: 560,
+    radiusMeters: 4600,
+    frequency: "EU868 (8 Kanal)",
+    connectedNodes: [19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35],
+    rssiAvgDbm: -86,
+    snrAvgDb: 10.2,
+    packetSuccessRate: 99.9,
+    uptime: "61g 08s 45dk",
+    backhaul: "Fiber Optik / Kesintisiz Güç Kaynağı",
+  },
+  {
+    id: 3,
+    name: "GW-03 Manavgat Batı Kanyon Rölesi",
+    lat: 36.892,
+    lng: 31.512,
+    elevation: 420,
+    radiusMeters: 4200,
+    frequency: "EU868 (8 Kanal)",
+    connectedNodes: [36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49],
+    rssiAvgDbm: -90,
+    snrAvgDb: 8.9,
+    packetSuccessRate: 99.7,
+    uptime: "29g 22s 10dk",
+    backhaul: "4G LTE Cat-M1 / Güneş Paneli + LiFePO4",
+  },
+] as const;
+

@@ -1,4 +1,5 @@
 import type {
+  GatewayInfo,
   ImpactSummary,
   NodeRisk,
   SensorNode,
@@ -6,11 +7,16 @@ import type {
   WindField,
 } from "@pyros/shared";
 import { useEffect, useRef, useState } from "react";
-import { FOREST_STATIONS, MockSimulationEngine } from "../services/mockEngine";
+import {
+  FOREST_STATIONS,
+  GATEWAYS as MOCK_GATEWAYS,
+  MockSimulationEngine,
+} from "../services/mockEngine";
 import { type ConnectionStatus, LiveWebSocketClient } from "../services/websocketClient";
 
 export interface PyrosDataState {
   nodes: readonly SensorNode[];
+  gateways: readonly GatewayInfo[];
   telemetries: Map<number, TelemetryMessage>;
   risks: Map<number, NodeRisk>;
   telemetryHistory: Map<number, TelemetryMessage[]>;
@@ -25,6 +31,7 @@ export function usePyrosData(): PyrosDataState {
   const isMockMode = import.meta.env.VITE_USE_MOCK === "true";
 
   const [nodes, setNodes] = useState<readonly SensorNode[]>([]);
+  const [gateways, setGateways] = useState<readonly GatewayInfo[]>(isMockMode ? MOCK_GATEWAYS : []);
   const [telemetries, setTelemetries] = useState<Map<number, TelemetryMessage>>(new Map());
   const [risks, setRisks] = useState<Map<number, NodeRisk>>(new Map());
   const [telemetryHistory, setTelemetryHistory] = useState<Map<number, TelemetryMessage[]>>(
@@ -139,6 +146,10 @@ export function usePyrosData(): PyrosDataState {
       setNodes(receivedNodes);
     });
 
+    const unsubGateways = client.onGateways((receivedGateways) => {
+      setGateways(receivedGateways);
+    });
+
     const unsubTelemetry = client.onTelemetry((msg) => {
       setTelemetries((prev) => {
         const next = new Map(prev);
@@ -176,6 +187,7 @@ export function usePyrosData(): PyrosDataState {
     return () => {
       unsubStatus();
       unsubNodes();
+      unsubGateways();
       unsubTelemetry();
       unsubRisk();
       unsubImpact();
@@ -187,6 +199,7 @@ export function usePyrosData(): PyrosDataState {
 
   return {
     nodes,
+    gateways,
     telemetries,
     risks,
     telemetryHistory,

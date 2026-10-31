@@ -114,9 +114,27 @@ export const WindFieldSchema = z.object({
   nodes: z.array(NodeWindSchema),
 });
 
+/** LoRaWAN Ağ Geçidi Kulesi Şeması */
+export const GatewayInfoSchema = z.object({
+  id: z.number().int(),
+  name: z.string(),
+  lat: z.number(),
+  lng: z.number(),
+  elevation: z.number(),
+  radiusMeters: z.number(),
+  frequency: z.string(),
+  connectedNodes: z.array(z.number()),
+  rssiAvgDbm: z.number(),
+  snrAvgDb: z.number(),
+  packetSuccessRate: z.number(),
+  uptime: z.string(),
+  backhaul: z.string(),
+});
+
 /** Backend -> Web WebSocket yayın mesajları */
 export const WsMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("nodes"), data: z.array(SensorNodeSchema).readonly() }),
+  z.object({ type: z.literal("gateways"), data: z.array(GatewayInfoSchema).readonly() }),
   z.object({ type: z.literal("telemetry"), data: TelemetryMessageSchema }),
   z.object({ type: z.literal("risk"), data: NodeRiskSchema }),
   z.object({ type: z.literal("impact"), data: ImpactSummarySchema }),

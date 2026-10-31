@@ -37,6 +37,19 @@ import {
 
 const socket = dgram.createSocket("udp4");
 
+// Birden fazla simülatör sürecinin aynı anda çalışıp Gateway'e çakışan veri basmasını önle
+const SIM_LOCK_PORT = 5006;
+socket.on("error", (err: NodeJS.ErrnoException) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(
+      `\n❌ [sensor-sim] ÇAKIŞMA HATASI: Başka bir sensör simülatörü zaten arka planda çalışıyor! (Port ${SIM_LOCK_PORT} kullanımda).\n` +
+        `Lütfen önce diğer terminaldeki simülatörü durdurun veya "pkill -f sensor-sim" çalıştırın.\n`,
+    );
+    process.exit(1);
+  }
+});
+socket.bind(SIM_LOCK_PORT);
+
 const fireNode = getNode(Number(process.env.FIRE_NODE ?? 0));
 const fireDelayS = Number(process.env.FIRE_DELAY_S ?? 45);
 const fireSpeed = Number(process.env.FIRE_SPEED ?? 1);

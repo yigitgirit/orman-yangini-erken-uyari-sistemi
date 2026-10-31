@@ -30,7 +30,6 @@ Wokwi simülasyonu VS Code'dan elle başlatılır: `firmware` klasörü → Plat
 ```
 pnpm dev:gateway
 pnpm dev:backend
-pnpm dev:monitor              # canlı 50 düğüm izleme ekranı
 pnpm dev:sensor               # FIRE_NODE=25 FIRE_SPEED=4 FIRE_DELAY_S=280 ile yangın senaryosu
 ```
 

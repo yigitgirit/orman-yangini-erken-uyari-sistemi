@@ -1,4 +1,4 @@
-import type { NodeRisk, SensorNode, TelemetryMessage } from "@pyros/shared";
+import { type NodeRisk, REGION_INFO, type SensorNode, type TelemetryMessage } from "@pyros/shared";
 import {
   Activity,
   AlertTriangle,
@@ -51,6 +51,12 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
   const lastTelemetryRef = useRef<TelemetryMessage | null>(telemetry);
   const lastRiskRef = useRef<NodeRisk | null>(risk);
 
+  // İstasyon değiştiğinde eski istasyonun telemetrisinin sızmasını engelle
+  if (station && lastStationRef.current && station.id !== lastStationRef.current.id) {
+    lastTelemetryRef.current = null;
+    lastRiskRef.current = null;
+  }
+
   if (station) lastStationRef.current = station;
   if (telemetry) lastTelemetryRef.current = telemetry;
   if (risk) lastRiskRef.current = risk;
@@ -59,7 +65,7 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
   const currentTelemetry = telemetry ?? lastTelemetryRef.current;
   const currentRisk = risk ?? lastRiskRef.current;
 
-  if (!currentStation || !currentTelemetry) return null;
+  if (!currentStation) return null;
 
   const isFire = currentRisk?.level === "red";
   const isSmoldering = currentRisk?.level === "yellow";
@@ -86,25 +92,35 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
 
             <span
               className={`inline-flex items-center gap-1.5 text-xs font-medium ${
-                isFire ? "text-red-400" : isSmoldering ? "text-amber-400" : "text-emerald-400"
+                !currentTelemetry
+                  ? "text-zinc-400"
+                  : isFire
+                    ? "text-red-400"
+                    : isSmoldering
+                      ? "text-amber-400"
+                      : "text-emerald-400"
               }`}
             >
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
-                  isFire
-                    ? "bg-red-400 animate-pulse"
-                    : isSmoldering
-                      ? "bg-amber-400 animate-pulse"
-                      : "bg-emerald-400"
+                  !currentTelemetry
+                    ? "bg-zinc-500 animate-pulse"
+                    : isFire
+                      ? "bg-red-400 animate-pulse"
+                      : isSmoldering
+                        ? "bg-amber-400 animate-pulse"
+                        : "bg-emerald-400"
                 }`}
               />
-              {isFire
-                ? "Aktif Yangın"
-                : isSmoldering
-                  ? currentRisk?.stage === "pyrolysis"
-                    ? "Piroliz Anomalisi"
-                    : "Tütme Riski"
-                  : "Stabil"}
+              {!currentTelemetry
+                ? "Sinyal Bekleniyor"
+                : isFire
+                  ? "Aktif Yangın"
+                  : isSmoldering
+                    ? currentRisk?.stage === "pyrolysis"
+                      ? "Piroliz Anomalisi"
+                      : "Tütme Riski"
+                    : "Stabil"}
             </span>
           </div>
 
@@ -121,7 +137,7 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
             <span className="text-zinc-600">·</span>
             <span className="flex items-center gap-1 text-zinc-300 font-medium">
               <Mountain className="h-3.5 w-3.5 text-zinc-500" />
-              Marmaris Sektörü
+              {REGION_INFO.name}
             </span>
           </DrawerDescription>
 
@@ -166,172 +182,188 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
               value="telemetry"
               className="flex-1 overflow-y-auto px-4 pt-3.5 pb-4 space-y-3 custom-scrollbar mt-0 focus:outline-none focus-visible:outline-none focus:ring-0"
             >
-              {/* Yangın & Anomali Risk Skoru Kartı */}
-              <div className="p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800/80 space-y-2 hover:border-zinc-700/80 transition-colors">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="font-medium text-zinc-400">Yangın & Anomali Risk Skoru</span>
-                  <span
-                    className={`font-mono font-bold text-sm ${
-                      riskScore > 70
-                        ? "text-red-400"
-                        : riskScore > 30
-                          ? "text-amber-400"
-                          : "text-emerald-400"
-                    }`}
-                  >
-                    {riskScore} / 100
-                  </span>
-                </div>
-                <div className="w-full bg-zinc-950 h-1.5 rounded-full overflow-hidden border border-zinc-800/80">
-                  <div
-                    className={`h-full transition-all duration-500 rounded-full ${
-                      riskScore > 70
-                        ? "bg-red-500"
-                        : riskScore > 30
-                          ? "bg-amber-500"
-                          : "bg-emerald-500"
-                    }`}
-                    style={{ width: `${Math.max(4, riskScore)}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* 4 Temel Metrik (Okunaklı & Yüksek Kontrastlı Grid) */}
-              <div className="grid grid-cols-2 gap-2.5">
-                {/* Sıcaklık */}
-                <div className="p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800/80 hover:border-zinc-700/80 transition-colors">
-                  <div className="flex items-center justify-between text-xs font-medium text-zinc-400">
-                    <span className="flex items-center gap-1.5 text-zinc-300">
-                      <Thermometer className="h-3.5 w-3.5 text-rose-400" />
-                      Sıcaklık
-                    </span>
-                    {currentRisk?.rate.temperature !== undefined &&
-                      currentRisk.rate.temperature !== 0 && (
-                        <span
-                          className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-medium ${
-                            currentRisk.rate.temperature > 0
-                              ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                              : "bg-zinc-800 text-zinc-400"
-                          }`}
-                        >
-                          {currentRisk.rate.temperature > 0
-                            ? `+${currentRisk.rate.temperature.toFixed(1)}`
-                            : currentRisk.rate.temperature.toFixed(1)}
-                          °/dk
-                        </span>
-                      )}
-                  </div>
-                  <div className="mt-2 flex items-baseline gap-1">
-                    <span className="text-2xl font-bold font-mono text-zinc-100 tracking-tight">
-                      {currentTelemetry.temperature.toFixed(1)}
-                    </span>
-                    <span className="text-xs font-normal text-zinc-400">°C</span>
+              {!currentTelemetry ? (
+                <div className="h-full min-h-[260px] flex flex-col items-center justify-center p-6 text-center space-y-3 bg-zinc-900/30 rounded-xl border border-zinc-800/80">
+                  <Radio className="h-10 w-10 text-zinc-600 animate-pulse" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-zinc-200">Canlı Telemetri Bekleniyor</p>
+                    <p className="text-xs text-zinc-400 max-w-xs leading-relaxed">
+                      {currentStation.source === "wokwi"
+                        ? "Wokwi simülatöründen henüz UDP paketi iletilmedi. Simülatörü çalıştırdığınızda canlı telemetri akışı başlayacaktır."
+                        : "Bu istasyon için henüz Gateway üzerinden paket iletilmedi."}
+                    </p>
                   </div>
                 </div>
-
-                {/* Karbonmonoksit */}
-                <div className="p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800/80 hover:border-zinc-700/80 transition-colors">
-                  <div className="flex items-center justify-between text-xs font-medium text-zinc-400">
-                    <span className="flex items-center gap-1.5 text-zinc-300">
-                      <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
-                      CO Gazı
-                    </span>
-                    {currentRisk?.rate.co !== undefined && currentRisk.rate.co !== 0 && (
+              ) : (
+                <>
+                  {/* Yangın & Anomali Risk Skoru Kartı */}
+                  <div className="p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800/80 space-y-2 hover:border-zinc-700/80 transition-colors">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-medium text-zinc-400">Yangın & Anomali Risk Skoru</span>
                       <span
-                        className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-medium ${
-                          currentRisk.rate.co > 0
-                            ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                            : "bg-zinc-800 text-zinc-400"
+                        className={`font-mono font-bold text-sm ${
+                          riskScore > 70
+                            ? "text-red-400"
+                            : riskScore > 30
+                              ? "text-amber-400"
+                              : "text-emerald-400"
                         }`}
                       >
-                        {currentRisk.rate.co > 0
-                          ? `+${currentRisk.rate.co.toFixed(1)}`
-                          : currentRisk.rate.co.toFixed(1)}{" "}
-                        ppm/dk
+                        {riskScore} / 100
                       </span>
-                    )}
+                    </div>
+                    <div className="w-full bg-zinc-950 h-1.5 rounded-full overflow-hidden border border-zinc-800/80">
+                      <div
+                        className={`h-full transition-all duration-500 rounded-full ${
+                          riskScore > 70
+                            ? "bg-red-500"
+                            : riskScore > 30
+                              ? "bg-amber-500"
+                              : "bg-emerald-500"
+                        }`}
+                        style={{ width: `${Math.max(4, riskScore)}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="mt-2 flex items-baseline gap-1">
-                    <span className="text-2xl font-bold font-mono text-zinc-100 tracking-tight">
-                      {currentTelemetry.co.toFixed(1)}
-                    </span>
-                    <span className="text-xs font-normal text-zinc-400">ppm</span>
-                  </div>
-                </div>
 
-                {/* Bağıl Nem */}
-                <div className="p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800/80 hover:border-zinc-700/80 transition-colors">
-                  <div className="flex items-center justify-between text-xs font-medium text-zinc-400">
-                    <span className="flex items-center gap-1.5 text-zinc-300">
-                      <Droplets className="h-3.5 w-3.5 text-sky-400" />
-                      Bağıl Nem
-                    </span>
-                  </div>
-                  <div className="mt-2 flex items-baseline gap-1">
-                    <span className="text-2xl font-bold font-mono text-zinc-100 tracking-tight">
-                      %{Math.round(currentTelemetry.humidity)}
-                    </span>
-                  </div>
-                </div>
+                  {/* 4 Temel Metrik (Okunaklı & Yüksek Kontrastlı Grid) */}
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {/* Sıcaklık */}
+                    <div className="p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800/80 hover:border-zinc-700/80 transition-colors">
+                      <div className="flex items-center justify-between text-xs font-medium text-zinc-400">
+                        <span className="flex items-center gap-1.5 text-zinc-300">
+                          <Thermometer className="h-3.5 w-3.5 text-rose-400" />
+                          Sıcaklık
+                        </span>
+                        {currentRisk?.rate.temperature !== undefined &&
+                          currentRisk.rate.temperature !== 0 && (
+                            <span
+                              className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-medium ${
+                                currentRisk.rate.temperature > 0
+                                  ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                                  : "bg-zinc-800 text-zinc-400"
+                              }`}
+                            >
+                              {currentRisk.rate.temperature > 0
+                                ? `+${currentRisk.rate.temperature.toFixed(1)}`
+                                : currentRisk.rate.temperature.toFixed(1)}
+                              °/dk
+                            </span>
+                          )}
+                      </div>
+                      <div className="mt-2 flex items-baseline gap-1">
+                        <span className="text-2xl font-bold font-mono text-zinc-100 tracking-tight">
+                          {currentTelemetry.temperature.toFixed(1)}
+                        </span>
+                        <span className="text-xs font-normal text-zinc-400">°C</span>
+                      </div>
+                    </div>
 
-                {/* CO2 Seviyesi */}
-                <div className="p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800/80 hover:border-zinc-700/80 transition-colors">
-                  <div className="flex items-center justify-between text-xs font-medium text-zinc-400">
-                    <span className="flex items-center gap-1.5 text-zinc-300">
-                      <CloudFog className="h-3.5 w-3.5 text-indigo-400" />
-                      Karbondioksit
-                    </span>
-                  </div>
-                  <div className="mt-2 flex items-baseline gap-1">
-                    <span className="text-2xl font-bold font-mono text-zinc-100 tracking-tight">
-                      {Math.round(currentTelemetry.co2)}
-                    </span>
-                    <span className="text-xs font-normal text-zinc-400">ppm</span>
-                  </div>
-                </div>
-              </div>
+                    {/* Karbonmonoksit */}
+                    <div className="p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800/80 hover:border-zinc-700/80 transition-colors">
+                      <div className="flex items-center justify-between text-xs font-medium text-zinc-400">
+                        <span className="flex items-center gap-1.5 text-zinc-300">
+                          <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
+                          CO Gazı
+                        </span>
+                        {currentRisk?.rate.co !== undefined && currentRisk.rate.co !== 0 && (
+                          <span
+                            className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-medium ${
+                              currentRisk.rate.co > 0
+                                ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                : "bg-zinc-800 text-zinc-400"
+                            }`}
+                          >
+                            {currentRisk.rate.co > 0
+                              ? `+${currentRisk.rate.co.toFixed(1)}`
+                              : currentRisk.rate.co.toFixed(1)}{" "}
+                            ppm/dk
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-2 flex items-baseline gap-1">
+                        <span className="text-2xl font-bold font-mono text-zinc-100 tracking-tight">
+                          {currentTelemetry.co.toFixed(1)}
+                        </span>
+                        <span className="text-xs font-normal text-zinc-400">ppm</span>
+                      </div>
+                    </div>
 
-              {/* Rüzgâr Durum Kutusu */}
-              <div className="p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800/80 space-y-1.5 hover:border-zinc-700/80 transition-colors">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="flex items-center gap-1.5 font-medium text-zinc-400">
-                    <Wind className="h-3.5 w-3.5 text-zinc-400" />
-                    Yerel Rüzgâr
-                  </span>
-                  <span className="text-xs text-zinc-400 font-mono">
-                    {currentTelemetry.windDirection !== null
-                      ? `${Math.round(currentTelemetry.windDirection)}° Azimut`
-                      : "İnterpole"}
-                  </span>
-                </div>
-                <div className="flex items-baseline justify-between pt-1">
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-2xl font-bold font-mono text-zinc-100">
-                      {currentTelemetry.windSpeed !== null
-                        ? currentTelemetry.windSpeed.toFixed(1)
-                        : "3.5"}
-                    </span>
-                    <span className="text-xs font-normal text-zinc-400">m/s</span>
-                  </div>
-                  <span className="text-xs text-zinc-300 font-medium">
-                    {currentTelemetry.windDirection !== null
-                      ? `${getCompass(currentTelemetry.windDirection)} Rüzgârı`
-                      : "Bölgesel Akış"}
-                  </span>
-                </div>
-              </div>
+                    {/* Bağıl Nem */}
+                    <div className="p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800/80 hover:border-zinc-700/80 transition-colors">
+                      <div className="flex items-center justify-between text-xs font-medium text-zinc-400">
+                        <span className="flex items-center gap-1.5 text-zinc-300">
+                          <Droplets className="h-3.5 w-3.5 text-sky-400" />
+                          Bağıl Nem
+                        </span>
+                      </div>
+                      <div className="mt-2 flex items-baseline gap-1">
+                        <span className="text-2xl font-bold font-mono text-zinc-100 tracking-tight">
+                          %{Math.round(currentTelemetry.humidity)}
+                        </span>
+                      </div>
+                    </div>
 
-              {/* Batarya Bilgi Şeridi */}
-              <div className="p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800/80 flex items-center justify-between text-xs text-zinc-300">
-                <div className="flex items-center gap-2">
-                  <Battery className="h-4 w-4 text-emerald-400" />
-                  <span className="text-zinc-400 font-medium">Batarya Seviyesi:</span>
-                  <span className="font-mono font-semibold text-zinc-100">
-                    %{currentTelemetry.battery}
-                  </span>
-                </div>
-                <span className="text-zinc-500 text-xs">3.7V LiFePO4 Güneş Destekli</span>
-              </div>
+                    {/* CO2 Seviyesi */}
+                    <div className="p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800/80 hover:border-zinc-700/80 transition-colors">
+                      <div className="flex items-center justify-between text-xs font-medium text-zinc-400">
+                        <span className="flex items-center gap-1.5 text-zinc-300">
+                          <CloudFog className="h-3.5 w-3.5 text-indigo-400" />
+                          Karbondioksit
+                        </span>
+                      </div>
+                      <div className="mt-2 flex items-baseline gap-1">
+                        <span className="text-2xl font-bold font-mono text-zinc-100 tracking-tight">
+                          {Math.round(currentTelemetry.co2)}
+                        </span>
+                        <span className="text-xs font-normal text-zinc-400">ppm</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Rüzgâr Durum Kutusu */}
+                  <div className="p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800/80 space-y-1.5 hover:border-zinc-700/80 transition-colors">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-1.5 font-medium text-zinc-400">
+                        <Wind className="h-3.5 w-3.5 text-zinc-400" />
+                        Yerel Rüzgâr
+                      </span>
+                      <span className="text-xs text-zinc-400 font-mono">
+                        {currentTelemetry.windDirection !== null
+                          ? `${Math.round(currentTelemetry.windDirection)}° Azimut`
+                          : "İnterpole"}
+                      </span>
+                    </div>
+                    <div className="flex items-baseline justify-between pt-1">
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-2xl font-bold font-mono text-zinc-100">
+                          {currentTelemetry.windSpeed !== null
+                            ? currentTelemetry.windSpeed.toFixed(1)
+                            : "3.5"}
+                        </span>
+                        <span className="text-xs font-normal text-zinc-400">m/s</span>
+                      </div>
+                      <span className="text-xs text-zinc-300 font-medium">
+                        {currentTelemetry.windDirection !== null
+                          ? `${getCompass(currentTelemetry.windDirection)} Rüzgârı`
+                          : "Bölgesel Akış"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Batarya Bilgi Şeridi */}
+                  <div className="p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800/80 flex items-center justify-between text-xs text-zinc-300">
+                    <div className="flex items-center gap-2">
+                      <Battery className="h-4 w-4 text-emerald-400" />
+                      <span className="text-zinc-400 font-medium">Batarya Seviyesi:</span>
+                      <span className="font-mono font-semibold text-zinc-100">
+                        %{currentTelemetry.battery}
+                      </span>
+                    </div>
+                    <span className="text-zinc-500 text-xs">3.7V LiFePO4 Güneş Destekli</span>
+                  </div>
+                </>
+              )}
             </TabsContent>
 
             {/* TAB 2: Analitik & Zaman Serisi */}
@@ -339,96 +371,114 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
               value="analytics"
               className="flex-1 overflow-y-auto px-4 pt-3.5 pb-4 space-y-3 custom-scrollbar mt-0 focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 outline-none ring-0"
             >
-              {/* Canlı Grafik */}
-              <div className="p-4 rounded-xl bg-zinc-900/50 border border-zinc-800/80 space-y-2.5">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-zinc-200 font-semibold flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4 text-amber-400" />
-                    Canlı Telemetri Trendi ({history.length} Örnek)
-                  </span>
-                  <div className="flex items-center gap-3 text-[11px] font-mono">
-                    <span className="text-rose-400">● Sıcaklık</span>
-                    <span className="text-amber-400">● CO ppm</span>
+              {history.length === 0 ? (
+                <div className="h-full min-h-[220px] flex flex-col items-center justify-center p-6 text-center space-y-3 bg-zinc-900/30 rounded-xl border border-zinc-800/80">
+                  <Activity className="h-10 w-10 text-zinc-600 animate-pulse" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-zinc-200">Kayıtlı Örnek Bulunamadı</p>
+                    <p className="text-xs text-zinc-400 max-w-xs leading-relaxed">
+                      Telemetri paketleri geldikçe canlı zaman serisi trendi burada
+                      görselleştirilir.
+                    </p>
                   </div>
                 </div>
+              ) : (
+                <>
+                  {/* Canlı Grafik */}
+                  <div className="p-4 rounded-xl bg-zinc-900/50 border border-zinc-800/80 space-y-2.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-zinc-200 font-semibold flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4 text-amber-400" />
+                        Canlı Telemetri Trendi ({history.length} Örnek)
+                      </span>
+                      <div className="flex items-center gap-3 text-[11px] font-mono">
+                        <span className="text-rose-400">● Sıcaklık</span>
+                        <span className="text-amber-400">● CO ppm</span>
+                      </div>
+                    </div>
 
-                <div className="h-44 w-full pt-1">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={history} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                      <XAxis dataKey="receivedAt" hide />
-                      <YAxis stroke="#52525b" fontSize={10} domain={["auto", "auto"]} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "#09090b",
-                          borderColor: "#27272a",
-                          fontSize: "11px",
-                          fontFamily: "sans-serif",
-                          borderRadius: "8px",
-                        }}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="temperature"
-                        name="Sıcaklık (°C)"
-                        stroke="#f43f5e"
-                        strokeWidth={2}
-                        dot={false}
-                        isAnimationActive={false}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="co"
-                        name="CO (ppm)"
-                        stroke="#f59e0b"
-                        strokeWidth={2}
-                        dot={false}
-                        isAnimationActive={false}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
+                    <div className="h-44 w-full pt-1">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={history}
+                          margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                        >
+                          <XAxis dataKey="receivedAt" hide />
+                          <YAxis stroke="#52525b" fontSize={10} domain={["auto", "auto"]} />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: "#09090b",
+                              borderColor: "#27272a",
+                              fontSize: "11px",
+                              fontFamily: "sans-serif",
+                              borderRadius: "8px",
+                            }}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="temperature"
+                            name="Sıcaklık (°C)"
+                            stroke="#f43f5e"
+                            strokeWidth={2}
+                            dot={false}
+                            isAnimationActive={false}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="co"
+                            name="CO (ppm)"
+                            stroke="#f59e0b"
+                            strokeWidth={2}
+                            dot={false}
+                            isAnimationActive={false}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
 
-              {/* MCE ve Yangın Evresi Göstergeleri */}
-              <div className="p-4 rounded-xl bg-zinc-900/50 border border-zinc-800/80 space-y-2.5">
-                <span className="text-xs font-semibold text-zinc-300 block">
-                  Yanma Evresi & MCE İndikatörleri
-                </span>
-                <div className="grid grid-cols-2 gap-2.5 text-xs">
-                  <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800/80">
-                    <span className="text-xs text-zinc-400 block">Yanma Evresi</span>
-                    <span className="text-sm font-semibold font-mono text-zinc-100 mt-1 block">
-                      {currentRisk?.stage === "flaming"
-                        ? "Alevli Yanma"
-                        : currentRisk?.stage === "smoldering"
-                          ? "İçin İçin Yanma"
-                          : currentRisk?.stage === "pyrolysis"
-                            ? "Piroliz (Gaz Çıkışı)"
-                            : "Normal"}
+                  {/* MCE ve Yangın Evresi Göstergeleri */}
+                  <div className="p-4 rounded-xl bg-zinc-900/50 border border-zinc-800/80 space-y-2.5">
+                    <span className="text-xs font-semibold text-zinc-300 block">
+                      Yanma Evresi & MCE İndikatörleri
                     </span>
-                  </div>
-                  <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800/80">
-                    <span className="text-xs text-zinc-400 block">MCE Verimliliği</span>
-                    <span className="text-sm font-semibold font-mono text-zinc-100 mt-1 block">
-                      {currentRisk?.mce ? currentRisk.mce.toFixed(2) : "Nominal"}
-                    </span>
-                  </div>
-                </div>
+                    <div className="grid grid-cols-2 gap-2.5 text-xs">
+                      <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800/80">
+                        <span className="text-xs text-zinc-400 block">Yanma Evresi</span>
+                        <span className="text-sm font-semibold font-mono text-zinc-100 mt-1 block">
+                          {currentRisk?.stage === "flaming"
+                            ? "Alevli Yanma"
+                            : currentRisk?.stage === "smoldering"
+                              ? "İçin İçin Yanma"
+                              : currentRisk?.stage === "pyrolysis"
+                                ? "Piroliz (Gaz Çıkışı)"
+                                : "Normal"}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800/80">
+                        <span className="text-xs text-zinc-400 block">MCE Verimliliği</span>
+                        <span className="text-sm font-semibold font-mono text-zinc-100 mt-1 block">
+                          {currentRisk?.mce ? currentRisk.mce.toFixed(2) : "Nominal"}
+                        </span>
+                      </div>
+                    </div>
 
-                {/* Komşu Doğrulaması */}
-                <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800/80 flex items-center justify-between text-xs">
-                  <span className="text-zinc-400">Komşu Doğrulama:</span>
-                  <span
-                    className={`font-mono font-semibold ${
-                      currentRisk?.confirmed ? "text-emerald-400" : "text-zinc-400"
-                    }`}
-                  >
-                    {currentRisk?.confirmed
-                      ? `Doğrulandı (${currentRisk.confirmedBy.length} Komşu)`
-                      : "Tekil İstasyon"}
-                  </span>
-                </div>
-              </div>
+                    {/* Komşu Doğrulaması */}
+                    <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800/80 flex items-center justify-between text-xs">
+                      <span className="text-zinc-400">Komşu Doğrulama:</span>
+                      <span
+                        className={`font-mono font-semibold ${
+                          currentRisk?.confirmed ? "text-emerald-400" : "text-zinc-400"
+                        }`}
+                      >
+                        {currentRisk?.confirmed
+                          ? `Doğrulandı (${currentRisk.confirmedBy.length} Komşu)`
+                          : "Tekil İstasyon"}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
             </TabsContent>
 
             {/* TAB 3: Donanım & Sensörler */}
@@ -490,7 +540,7 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
                   </div>
                   <div>
                     <span className="text-zinc-500 block text-[11px]">Saha Sektörü:</span>
-                    <span className="text-zinc-200 font-medium">Marmaris Balan Dağı</span>
+                    <span className="text-zinc-200 font-medium">{REGION_INFO.name}</span>
                   </div>
                 </div>
               </div>
@@ -501,13 +551,19 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
         {/* Standart DrawerFooter Bileşeni */}
         <DrawerFooter className="px-4 py-3 border-t border-zinc-800/80 bg-zinc-950 text-xs text-zinc-400 flex flex-row items-center justify-between shrink-0 m-0">
           <div className="flex items-center gap-2">
-            <Radio className="h-3.5 w-3.5 text-emerald-400" />
+            <Radio
+              className={`h-3.5 w-3.5 ${currentTelemetry ? "text-emerald-400" : "text-zinc-600"}`}
+            />
             <span>Paket İletimi:</span>
             <span className="font-mono text-zinc-200">
-              {new Date(currentTelemetry.receivedAt).toLocaleTimeString()}
+              {currentTelemetry
+                ? new Date(currentTelemetry.receivedAt).toLocaleTimeString()
+                : "Bekleniyor..."}
             </span>
           </div>
-          <span className="font-mono text-[11px] text-zinc-500">CRC-8: DOĞRULANDI</span>
+          <span className="font-mono text-[11px] text-zinc-500">
+            {currentTelemetry ? "CRC-8: DOĞRULANDI" : "LİNK: BEKLEMEDE"}
+          </span>
         </DrawerFooter>
       </DrawerContent>
     </Drawer>
