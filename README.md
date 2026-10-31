@@ -54,7 +54,9 @@ pnpm dev:monitor              # canlı 50 düğüm izleme ekranı
 pnpm dev:sensor               # FIRE_NODE=25 FIRE_SPEED=4 FIRE_DELAY_S=280 ile yangın senaryosu
 ```
 
-## Frontend için WebSocket (ws://localhost:8080)
+## Frontend için WebSocket (wss://localhost:8080)
+
+Backend varsayılan olarak kendinden imzalı sertifikayla `wss://` dinler; tarayıcılar bu bağlantıyı sessizce reddeder. Bu yüzden `apps/web` backend'e doğrudan değil, kendi sunucusu üzerinden `/ws` yoluyla bağlanır (`vite.config.ts` bunu backend'e wss ile aktarır). Başka bir adres için `VITE_WS_URL`.
 
 Tipler: `packages/shared/src/types.ts` (`WsMessage`).
 
