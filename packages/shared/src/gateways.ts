@@ -48,4 +48,3 @@ export const GATEWAYS: readonly GatewayInfo[] = [
     backhaul: "4G LTE Cat-M1 / Güneş Paneli + LiFePO4",
   },
 ] as const;
-

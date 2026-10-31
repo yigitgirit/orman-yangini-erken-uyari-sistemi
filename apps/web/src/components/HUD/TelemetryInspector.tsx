@@ -521,9 +521,7 @@ export const TelemetryInspector: React.FC<TelemetryInspectorProps> = ({
                   </div>
                   <div className="flex justify-between items-center pt-2">
                     <span className="text-zinc-400">İletişim Protokolü</span>
-                    <span className="text-sky-300 font-mono">
-                      PyrosFrame v3 (AES-128-CCM, 29B)
-                    </span>
+                    <span className="text-sky-300 font-mono">PyrosFrame v3 (AES-128-CCM, 29B)</span>
                   </div>
                 </div>
               </div>
