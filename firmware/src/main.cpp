@@ -1,22 +1,67 @@
 // Katman 1 (donanim): ESP32 sensor dugumu (NODE_ID 50)
-// Sensorleri okur -> PyrosFrame v2 (16 bayt) -> UDP -> apps/gateway :5005
+// Sensorleri okur -> PyrosFrame v3 (AES-128-CCM muhurlu, 29 bayt) -> UDP -> apps/gateway :5005
 // 49 simule dugumle ayni protokol ve ayni hiyerarsik olcum mantigi.
 //
+// Once:       proje kokunde pnpm keys (include/node_key.h)
 // Wokwi:      pio run -e wokwi  -> diagram.json -> "Wokwi: Start Simulator"
 // Gercek kart: include/secrets.h -> pio run -e esp32dev -t upload
 
 #include <Arduino.h>
 #include <DHT.h>
+#include <Preferences.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
+#include <time.h>
 
 #include "config.h"
 #include "pyros_frame.h"
+#include "pyros_secure.h"
+
+static_assert(NODE_KEY_ID == NODE_ID, "node_key.h baska dugumun anahtari: pnpm keys");
 
 using namespace pyros;
 
 DHT dht(DHT_PIN, DHT_TYPE);
 WiFiUDP udp;
+
+// ---- Tekrar korumasi sayaci ----
+// Gateway her dugumun son sayacini tutar, ayni ya da eski sayacli paketi reddeder. Bu yuzden sayac
+// yeniden baslatmada asla geri gitmemeli. Iki kaynaktan buyugu alinir:
+//  - Saat (NTP): 2025'ten beri saniye x 2. Saniyede en fazla 1 paket gittigi icin hep eski sayacin ustunde.
+//  - Kalici bellek (NVS): her 100 pakette bir "buraya kadar kullanildi" yazilir (flash yipranmasin diye).
+//    Saati olmayan gercek LoRa dugumunde tek basina yeterli.
+constexpr uint32_t COUNTER_EPOCH_S = 1735689600;  // packages/shared/src/secure.ts ile ayni
+constexpr uint32_t COUNTER_RESERVE = 100;
+Preferences prefs;
+uint32_t frameCounter = 0;
+uint32_t counterReserved = 0;
+
+void reserveCounters() {
+  counterReserved = frameCounter + COUNTER_RESERVE;
+  prefs.putUInt("ctr", counterReserved);
+}
+
+void initCounter() {
+  configTime(0, 0, "pool.ntp.org", "time.google.com");
+  time_t now = time(nullptr);
+  for (int i = 0; i < 20 && now < (time_t)COUNTER_EPOCH_S; i++) {  // en fazla 5 sn bekle
+    delay(250);
+    now = time(nullptr);
+  }
+  uint32_t fromClock = now >= (time_t)COUNTER_EPOCH_S ? (uint32_t)(now - COUNTER_EPOCH_S) * 2 : 0;
+
+  prefs.begin("pyros");
+  uint32_t fromFlash = prefs.getUInt("ctr", 0);
+  frameCounter = max(fromClock, fromFlash);
+  reserveCounters();
+  Serial.printf("Sayac: %lu (saat: %lu, kalici bellek: %lu)%s\n", (unsigned long)frameCounter,
+                (unsigned long)fromClock, (unsigned long)fromFlash, fromClock == 0 ? " - UYARI: NTP yok" : "");
+}
+
+uint32_t nextCounter() {
+  if (frameCounter >= counterReserved) reserveCounters();
+  return frameCounter++;
+}
 
 struct Baseline {
   float co = NAN;
@@ -165,19 +210,20 @@ Frame readSensors() {
 }
 
 void sendFrame(const Frame& f) {
-  uint8_t buf[FRAME_SIZE];
-  pack(f, buf);
-
-  bool ok = udp.beginPacket(GATEWAY_HOST, GATEWAY_UDP_PORT) && udp.write(buf, FRAME_SIZE) == FRAME_SIZE &&
-            udp.endPacket();
+  uint8_t plain[FRAME_SIZE];
+  pack(f, plain);
+  uint8_t buf[SECURE_FRAME_SIZE];
+  uint32_t counter = nextCounter();
+  bool ok = seal(plain, counter, buf) && udp.beginPacket(GATEWAY_HOST, GATEWAY_UDP_PORT) &&
+            udp.write(buf, SECURE_FRAME_SIZE) == SECURE_FRAME_SIZE && udp.endPacket();
 
   Serial.printf("[%s] T=%.1fC RH=%.0f%% CO=%.1fppm CO2=%.0fppm VOC=%.0f PM=", f.mode == MODE_ALERT ? "ALARM" : "normal",
                 f.temperature, f.humidity, f.co, f.co2, f.vocIndex);
   if (isnan(f.pm25)) Serial.print("-");
   else Serial.printf("%.0f", f.pm25);
-  Serial.printf(" ruzgar=%.1fm/s %.0f° pil=%%%.0f bayrak=0x%X -> ", f.windSpeed, f.windDirection, f.battery,
-                f.flags);
-  for (size_t i = 0; i < FRAME_SIZE; i++) Serial.printf("%02X", buf[i]);
+  Serial.printf(" ruzgar=%.1fm/s %.0f° pil=%%%.0f bayrak=0x%X sayac=%lu -> ", f.windSpeed, f.windDirection,
+                f.battery, f.flags, (unsigned long)counter);
+  for (size_t i = 0; i < SECURE_FRAME_SIZE; i++) Serial.printf("%02X", buf[i]);
   Serial.println(ok ? " gonderildi" : " GONDERILEMEDI");
 }
 
@@ -196,7 +242,8 @@ void setup() {
   lastWindSampleAt = millis();
 #endif
   connectWiFi();
-  Serial.printf("Dugum %d -> %s:%d (UDP)\n", NODE_ID, GATEWAY_HOST, GATEWAY_UDP_PORT);
+  initCounter();
+  Serial.printf("Dugum %d -> %s:%d (UDP, AES-128-CCM)\n", NODE_ID, GATEWAY_HOST, GATEWAY_UDP_PORT);
 }
 
 void loop() {

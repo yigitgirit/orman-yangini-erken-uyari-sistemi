@@ -116,11 +116,11 @@ export const GATEWAYS: readonly GatewayInfo[] = [
 ] as const;
 
 export const REGION_CENTER = {
-  lat: 36.895,
-  lng: 31.535,
-  zoom: 13.5,
+  lat: 36.852,
+  lng: 28.204,
+  zoom: 13.6,
   pitch: 62,
-  bearing: -20,
+  bearing: 25,
 };
 
 /**

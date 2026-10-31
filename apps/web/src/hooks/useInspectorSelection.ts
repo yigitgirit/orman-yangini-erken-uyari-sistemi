@@ -1,6 +1,5 @@
-import type { SensorNode } from "@pyros/shared";
+import type { GatewayInfo, SensorNode } from "@pyros/shared";
 import { useCallback, useState } from "react";
-import { GATEWAYS } from "../services/mockEngine";
 
 export interface InspectorSelectionState {
   selectedStationId: number | null;
@@ -14,7 +13,10 @@ export interface InspectorSelectionState {
   closeGateway: () => void;
 }
 
-export function useInspectorSelection(nodes: readonly SensorNode[]): InspectorSelectionState {
+export function useInspectorSelection(
+  nodes: readonly SensorNode[],
+  gateways: readonly GatewayInfo[],
+): InspectorSelectionState {
   const [selectedStationId, setSelectedStationId] = useState<number | null>(null);
   const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(false);
 
@@ -42,17 +44,20 @@ export function useInspectorSelection(nodes: readonly SensorNode[]): InspectorSe
     setIsInspectorOpen(false);
   }, []);
 
-  const selectGateway = useCallback((id: number) => {
-    setSelectedStationId(null);
-    setIsInspectorOpen(false);
-    setSelectedGatewayId(id);
-    setIsGatewayInspectorOpen(true);
+  const selectGateway = useCallback(
+    (id: number) => {
+      setSelectedStationId(null);
+      setIsInspectorOpen(false);
+      setSelectedGatewayId(id);
+      setIsGatewayInspectorOpen(true);
 
-    const targetGw = GATEWAYS.find((g) => g.id === id);
-    if (targetGw) {
-      setCameraFocus({ lat: targetGw.lat, lng: targetGw.lng });
-    }
-  }, []);
+      const targetGw = gateways.find((g) => g.id === id);
+      if (targetGw) {
+        setCameraFocus({ lat: targetGw.lat, lng: targetGw.lng });
+      }
+    },
+    [gateways],
+  );
 
   const closeGateway = useCallback(() => {
     setIsGatewayInspectorOpen(false);

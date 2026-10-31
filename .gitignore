@@ -21,5 +21,22 @@ firmware/include/secrets.h
 apps/backend/certs/
 *.pem
 
+# MQTT sifre dosyasi (pnpm mqtt:users .env'den uretir)
+mosquitto/config/passwd
+
+# Sensor anahtari (pnpm keys) ve gateway sayac durumu
+firmware/include/node_key.h
+apps/gateway/.sayaclar.json
+
+# Yerel SQLite veritabani ve topoloji
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
 # Surec PID dosyalari
 .pids/
+
+# Dokumantasyon ve yerel notlar
+docs/

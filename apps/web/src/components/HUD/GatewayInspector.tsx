@@ -35,7 +35,7 @@ export const GatewayInspector: React.FC<GatewayInspectorProps> = ({
 
   return (
     <Drawer open={isOpen} onOpenChange={(open) => !open && onClose()} direction="right">
-      <DrawerContent className="bg-zinc-950 border border-zinc-800/90 text-zinc-100 shadow-2xl shadow-black/80 rounded-2xl overflow-hidden focus:outline-none font-sans antialiased select-none data-[vaul-drawer-direction=right]:top-11 data-[vaul-drawer-direction=right]:bottom-2.5 data-[vaul-drawer-direction=right]:right-2.5 data-[vaul-drawer-direction=right]:h-[calc(100vh-3.5rem)] data-[vaul-drawer-direction=right]:max-h-[calc(100vh-3.5rem)] data-[vaul-drawer-direction=right]:w-[calc(100vw-1.25rem)] data-[vaul-drawer-direction=right]:sm:w-[420px] data-[vaul-drawer-direction=right]:sm:max-w-[420px] data-[vaul-drawer-direction=right]:rounded-2xl data-[vaul-drawer-direction=right]:border data-[vaul-drawer-direction=right]:border-zinc-800">
+      <DrawerContent className="bg-zinc-950 border border-zinc-800 text-zinc-100 shadow-2xl shadow-black/80 rounded-2xl overflow-hidden focus:outline-none font-sans antialiased select-none data-[vaul-drawer-direction=right]:!top-14 data-[vaul-drawer-direction=right]:!bottom-3 data-[vaul-drawer-direction=right]:!right-3 data-[vaul-drawer-direction=right]:!h-[calc(100vh-4.25rem)] data-[vaul-drawer-direction=right]:!max-h-[calc(100vh-4.25rem)] data-[vaul-drawer-direction=right]:!w-[calc(100vw-1.5rem)] data-[vaul-drawer-direction=right]:sm:!w-[420px] data-[vaul-drawer-direction=right]:sm:!max-w-[420px] data-[vaul-drawer-direction=right]:!rounded-2xl data-[vaul-drawer-direction=right]:!border data-[vaul-drawer-direction=right]:!border-zinc-800">
         {/* Üst Başlık Şeridi: Net Hiyerarşi & Sade Tasarım */}
         <DrawerHeader className="relative px-4 pt-4 pb-2 bg-zinc-950 text-left">
           {/* 1. Satır: Kategori Kicker ve Zarif Canlı Durum İndikatörü */}
@@ -62,13 +62,12 @@ export const GatewayInspector: React.FC<GatewayInspectorProps> = ({
           </DrawerTitle>
 
           {/* 3. Satır: Konum ve Rakım Bilgileri */}
-          <DrawerDescription className="text-xs text-zinc-400 flex items-center gap-2 pt-0.5">
-            <span className="font-mono text-zinc-300">
+          <DrawerDescription className="text-xs text-zinc-400 flex items-center justify-between pt-1">
+            <span className="font-mono text-zinc-300 whitespace-nowrap">
               {currentGateway.lat.toFixed(4)}° N, {currentGateway.lng.toFixed(4)}° E
             </span>
-            <span className="text-zinc-600">·</span>
-            <span className="flex items-center gap-1 text-zinc-300 font-medium">
-              <Mountain className="h-3.5 w-3.5 text-zinc-500" />
+            <span className="flex items-center gap-1 text-zinc-400 font-medium text-[11px]">
+              <Mountain className="h-3 w-3 text-zinc-500 shrink-0" />
               {currentGateway.elevation} m Rakım
             </span>
           </DrawerDescription>
@@ -139,7 +138,7 @@ export const GatewayInspector: React.FC<GatewayInspectorProps> = ({
                     <span className="text-2xl font-bold font-mono text-zinc-100 tracking-tight">
                       {currentGateway.connectedNodes.length}
                     </span>
-                    <span className="text-xs font-normal text-zinc-400">/ 31 İstasyon</span>
+                    <span className="text-xs font-normal text-zinc-400">İstasyon</span>
                   </div>
                   <div className="text-xs text-zinc-400 mt-1">Aktif Telemetri</div>
                 </div>
@@ -259,8 +258,11 @@ export const GatewayInspector: React.FC<GatewayInspectorProps> = ({
                   >
                     <span className="text-zinc-500 font-mono text-[11px]">#</span>
                     <span className="font-mono font-semibold text-sm">{nodeId}</span>
-                    {nodeId === 31 && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
+                    {nodeId === 50 && (
+                      <span
+                        className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse"
+                        title="Canlı Wokwi ESP32 Düğümü"
+                      />
                     )}
                   </button>
                 ))}

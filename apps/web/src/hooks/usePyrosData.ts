@@ -1,4 +1,6 @@
 import type {
+  FireSpreadPrediction,
+  GatewayInfo,
   ImpactSummary,
   NodeRisk,
   SensorNode,
@@ -6,31 +8,50 @@ import type {
   WindField,
 } from "@pyros/shared";
 import { useEffect, useRef, useState } from "react";
-import { FOREST_STATIONS, MockSimulationEngine } from "../services/mockEngine";
+import {
+  FOREST_STATIONS,
+  GATEWAYS as MOCK_GATEWAYS,
+  MockSimulationEngine,
+} from "../services/mockEngine";
 import { type ConnectionStatus, LiveWebSocketClient } from "../services/websocketClient";
 
 export interface PyrosDataState {
   nodes: readonly SensorNode[];
+  gateways: readonly GatewayInfo[];
   telemetries: Map<number, TelemetryMessage>;
   risks: Map<number, NodeRisk>;
   telemetryHistory: Map<number, TelemetryMessage[]>;
   windField: WindField | null;
+  fireSpread: FireSpreadPrediction | null;
   impact: ImpactSummary;
   connectionStatus: ConnectionStatus;
   isMockMode: boolean;
   wsUrl: string;
+  adminToken: string | null;
+  isAdmin: boolean;
+  adminAuthError: string | null;
+  adminNotice: { text: string; type: "success" | "error" } | null;
+  loginAdmin: (username: string, password: string) => void;
+  logoutAdmin: () => void;
+  createNode: (params: { name: string; lat: number; lng: number; hasAnemometer: boolean }) => void;
+  deleteNode: (nodeId: number) => void;
+  createGateway: (params: { name: string; lat: number; lng: number; radiusMeters: number }) => void;
+  deleteGateway: (gatewayId: number) => void;
+  resetTopology: () => void;
 }
 
 export function usePyrosData(): PyrosDataState {
   const isMockMode = import.meta.env.VITE_USE_MOCK === "true";
 
   const [nodes, setNodes] = useState<readonly SensorNode[]>([]);
+  const [gateways, setGateways] = useState<readonly GatewayInfo[]>(isMockMode ? MOCK_GATEWAYS : []);
   const [telemetries, setTelemetries] = useState<Map<number, TelemetryMessage>>(new Map());
   const [risks, setRisks] = useState<Map<number, NodeRisk>>(new Map());
   const [telemetryHistory, setTelemetryHistory] = useState<Map<number, TelemetryMessage[]>>(
     new Map(),
   );
   const [windField, setWindField] = useState<WindField | null>(null);
+  const [fireSpread, setFireSpread] = useState<FireSpreadPrediction | null>(null);
   const [impact, setImpact] = useState<ImpactSummary>({
     detectedFires: 0,
     savedHectares: 0,
@@ -39,6 +60,19 @@ export function usePyrosData(): PyrosDataState {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(
     isMockMode ? "connected" : "connecting",
   );
+
+  const [adminToken, setAdminToken] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem("pyros_admin_token");
+    } catch {
+      return null;
+    }
+  });
+  const [adminAuthError, setAdminAuthError] = useState<string | null>(null);
+  const [adminNotice, setAdminNotice] = useState<{
+    text: string;
+    type: "success" | "error";
+  } | null>(null);
 
   const mockEngineRef = useRef<MockSimulationEngine | null>(null);
 
@@ -139,6 +173,10 @@ export function usePyrosData(): PyrosDataState {
       setNodes(receivedNodes);
     });
 
+    const unsubGateways = client.onGateways((receivedGateways) => {
+      setGateways(receivedGateways);
+    });
+
     const unsubTelemetry = client.onTelemetry((msg) => {
       setTelemetries((prev) => {
         const next = new Map(prev);
@@ -171,29 +209,145 @@ export function usePyrosData(): PyrosDataState {
       setWindField(w);
     });
 
+    const unsubSpread = client.onFireSpread((spread) => {
+      setFireSpread(spread);
+    });
+
+    const unsubAdminAuth = client.onAdminAuth((data) => {
+      if (data.success && data.token) {
+        setAdminToken(data.token);
+        try {
+          sessionStorage.setItem("pyros_admin_token", data.token);
+        } catch {
+          // ignore
+        }
+        setAdminAuthError(null);
+        setAdminNotice({ text: "Yönetici girişi başarılı.", type: "success" });
+        setTimeout(() => setAdminNotice(null), 3000);
+      } else {
+        setAdminAuthError(data.error ?? "Giriş başarısız.");
+      }
+    });
+
+    const unsubAdminAction = client.onAdminAction((data) => {
+      setAdminNotice({ text: data.message, type: data.success ? "success" : "error" });
+      setTimeout(() => setAdminNotice(null), 3500);
+    });
+
     client.connect();
 
     return () => {
       unsubStatus();
       unsubNodes();
+      unsubGateways();
       unsubTelemetry();
       unsubRisk();
       unsubImpact();
       unsubWind();
+      unsubSpread();
+      unsubAdminAuth();
+      unsubAdminAction();
     };
   }, []);
+
+  const loginAdmin = (username: string, password: string) => {
+    setAdminAuthError(null);
+    LiveWebSocketClient.getInstance().sendCommand({
+      type: "admin_login",
+      username,
+      password,
+    });
+  };
+
+  const logoutAdmin = () => {
+    setAdminToken(null);
+    try {
+      sessionStorage.removeItem("pyros_admin_token");
+    } catch {
+      // ignore
+    }
+    setAdminNotice({ text: "Yönetici oturumu kapatıldı.", type: "success" });
+    setTimeout(() => setAdminNotice(null), 3000);
+  };
+
+  const createNode = (params: {
+    name: string;
+    lat: number;
+    lng: number;
+    hasAnemometer: boolean;
+  }) => {
+    if (!adminToken) return;
+    LiveWebSocketClient.getInstance().sendCommand({
+      type: "admin_create_node",
+      token: adminToken,
+      ...params,
+    });
+  };
+
+  const deleteNode = (nodeId: number) => {
+    if (!adminToken) return;
+    LiveWebSocketClient.getInstance().sendCommand({
+      type: "admin_delete_node",
+      token: adminToken,
+      nodeId,
+    });
+  };
+
+  const createGateway = (params: {
+    name: string;
+    lat: number;
+    lng: number;
+    radiusMeters: number;
+  }) => {
+    if (!adminToken) return;
+    LiveWebSocketClient.getInstance().sendCommand({
+      type: "admin_create_gateway",
+      token: adminToken,
+      ...params,
+    });
+  };
+
+  const deleteGateway = (gatewayId: number) => {
+    if (!adminToken) return;
+    LiveWebSocketClient.getInstance().sendCommand({
+      type: "admin_delete_gateway",
+      token: adminToken,
+      gatewayId,
+    });
+  };
+
+  const resetTopology = () => {
+    if (!adminToken) return;
+    LiveWebSocketClient.getInstance().sendCommand({
+      type: "admin_reset_defaults",
+      token: adminToken,
+    });
+  };
 
   const wsUrl = LiveWebSocketClient.getInstance().getUrl();
 
   return {
     nodes,
+    gateways,
     telemetries,
     risks,
     telemetryHistory,
     windField,
+    fireSpread,
     impact,
     connectionStatus,
     isMockMode,
     wsUrl,
+    adminToken,
+    isAdmin: Boolean(adminToken),
+    adminAuthError,
+    adminNotice,
+    loginAdmin,
+    logoutAdmin,
+    createNode,
+    deleteNode,
+    createGateway,
+    deleteGateway,
+    resetTopology,
   };
 }

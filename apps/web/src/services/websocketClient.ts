@@ -1,4 +1,6 @@
 import {
+  type FireSpreadPrediction,
+  type GatewayInfo,
   type ImpactSummary,
   type NodeRisk,
   type SensorNode,
@@ -13,10 +15,22 @@ export type ConnectionStatus = "connecting" | "connected" | "disconnected";
 
 type StatusListener = (status: ConnectionStatus) => void;
 type NodesListener = (nodes: readonly SensorNode[]) => void;
+type GatewaysListener = (gateways: readonly GatewayInfo[]) => void;
 type TelemetryListener = (telemetry: TelemetryMessage) => void;
 type RiskListener = (risk: NodeRisk) => void;
 type ImpactListener = (impact: ImpactSummary) => void;
 type WindListener = (wind: WindField) => void;
+type FireSpreadListener = (spread: FireSpreadPrediction | null) => void;
+type AdminAuthListener = (data: { success: boolean; token?: string; error?: string }) => void;
+type AdminActionListener = (data: { success: boolean; action: string; message: string }) => void;
+export interface ArchiveResultData {
+  queryId?: string;
+  rows: unknown[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+type ArchiveListener = (data: ArchiveResultData) => void;
 
 export class LiveWebSocketClient {
   private static instance: LiveWebSocketClient | null = null;
@@ -28,19 +42,23 @@ export class LiveWebSocketClient {
 
   private statusListeners = new Set<StatusListener>();
   private nodesListeners = new Set<NodesListener>();
+  private gatewaysListeners = new Set<GatewaysListener>();
   private telemetryListeners = new Set<TelemetryListener>();
   private riskListeners = new Set<RiskListener>();
   private impactListeners = new Set<ImpactListener>();
   private windListeners = new Set<WindListener>();
+  private fireSpreadListeners = new Set<FireSpreadListener>();
+  private adminAuthListeners = new Set<AdminAuthListener>();
+  private adminActionListeners = new Set<AdminActionListener>();
+  private archiveListeners = new Set<ArchiveListener>();
 
   private url: string;
 
   private constructor() {
-    // TLS wss:// öncelikli bağlantı URL'i
-    const defaultProto = window.location.protocol === "https:" ? "wss:" : "wss:";
-    const host = window.location.hostname || "localhost";
-    const port = import.meta.env.VITE_WS_PORT ?? "8080";
-    this.url = import.meta.env.VITE_WS_URL ?? `${defaultProto}//${host}:${port}`;
+    // Varsayılan: sayfanın kendi sunucusu üzerinden /ws (vite.config.ts backend'e wss ile aktarır).
+    // Tarayıcı backend'in kendinden imzalı sertifikasını görmez; sertifika onayı gerekmez.
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    this.url = import.meta.env.VITE_WS_URL ?? `${proto}//${window.location.host}/ws`;
   }
 
   public static getInstance(): LiveWebSocketClient {
@@ -75,6 +93,9 @@ export class LiveWebSocketClient {
             case "nodes":
               for (const l of this.nodesListeners) l(msg.data);
               break;
+            case "gateways":
+              for (const l of this.gatewaysListeners) l(msg.data);
+              break;
             case "telemetry":
               for (const l of this.telemetryListeners) l(msg.data);
               break;
@@ -86,6 +107,18 @@ export class LiveWebSocketClient {
               break;
             case "wind":
               for (const l of this.windListeners) l(msg.data);
+              break;
+            case "fire_spread":
+              for (const l of this.fireSpreadListeners) l(msg.data);
+              break;
+            case "admin_auth_result":
+              for (const l of this.adminAuthListeners) l(msg.data);
+              break;
+            case "admin_action_result":
+              for (const l of this.adminActionListeners) l(msg.data);
+              break;
+            case "archive_result":
+              for (const l of this.archiveListeners) l(msg.data);
               break;
           }
         } catch (err) {
@@ -156,6 +189,11 @@ export class LiveWebSocketClient {
     return () => this.nodesListeners.delete(l);
   }
 
+  public onGateways(l: GatewaysListener): () => void {
+    this.gatewaysListeners.add(l);
+    return () => this.gatewaysListeners.delete(l);
+  }
+
   public onTelemetry(l: TelemetryListener): () => void {
     this.telemetryListeners.add(l);
     return () => this.telemetryListeners.delete(l);
@@ -174,6 +212,26 @@ export class LiveWebSocketClient {
   public onWind(l: WindListener): () => void {
     this.windListeners.add(l);
     return () => this.windListeners.delete(l);
+  }
+
+  public onFireSpread(l: FireSpreadListener): () => void {
+    this.fireSpreadListeners.add(l);
+    return () => this.fireSpreadListeners.delete(l);
+  }
+
+  public onAdminAuth(l: AdminAuthListener): () => void {
+    this.adminAuthListeners.add(l);
+    return () => this.adminAuthListeners.delete(l);
+  }
+
+  public onAdminAction(l: AdminActionListener): () => void {
+    this.adminActionListeners.add(l);
+    return () => this.adminActionListeners.delete(l);
+  }
+
+  public onArchiveResult(l: ArchiveListener): () => void {
+    this.archiveListeners.add(l);
+    return () => this.archiveListeners.delete(l);
   }
 
   public disconnect(): void {

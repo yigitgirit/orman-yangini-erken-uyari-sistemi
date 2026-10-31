@@ -1,4 +1,5 @@
 // PyrosFrame v2 kodlayici (packages/shared/src/protocol.ts ile bayt bayt ayni)
+// Agda tek basina gonderilmez: pyros_secure.h ilk 15 baytini sifreleyip v3 olarak muhurler.
 //
 // | Bayt  | Alan          | Kodlama                                                   |
 // |-------|---------------|-----------------------------------------------------------|

@@ -6,7 +6,9 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./env": "./src/env.ts"
+    "./env": "./src/env.ts",
+    "./secure": "./src/secure.ts",
+    "./db": "./src/db.ts"
   },
   "scripts": {
     "typecheck": "tsc"

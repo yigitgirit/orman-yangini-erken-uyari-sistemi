@@ -1,4 +1,4 @@
-import type { NodeRisk, SensorNode, TelemetryMessage } from "@pyros/shared";
+import type { FireSpreadPrediction, NodeRisk, SensorNode, TelemetryMessage } from "@pyros/shared";
 import { RadioTower } from "lucide-react";
 import maplibregl, { type Map as MapLibreMap } from "maplibre-gl";
 import type React from "react";
@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import { REGION_CENTER } from "../../services/mockEngine";
 import type { GatewayInfo } from "../../types/simulation";
 import { generateHuygensSpreadPolygon } from "./spreadCone";
+import { WindParticleLayer } from "./WindParticleLayer";
 import { generateWindVectorFeature } from "./windVectors";
 
 interface Map3DProps {
@@ -14,15 +15,22 @@ interface Map3DProps {
   telemetries: Map<number, TelemetryMessage>;
   risks: Map<number, NodeRisk>;
   gateways: readonly GatewayInfo[];
+  fireSpread?: FireSpreadPrediction | null;
   activeFireNodeId: number | null;
   windDirection: number;
   windSpeed: number;
-  showWindLayer: boolean;
+  showWindLayer?: boolean;
+  showWindParticles?: boolean;
+  showGatewayCoverage?: boolean;
+  showStationVectors?: boolean;
   cameraFocus: { lat: number; lng: number } | null;
   selectedStationId: number | null;
   selectedGatewayId: number | null;
+  adminMode?: "none" | "add_node" | "add_gateway" | "delete";
   onSelectStation: (id: number) => void;
   onSelectGateway: (id: number) => void;
+  onMapClick?: (coords: { lat: number; lng: number }) => void;
+  onDeleteRequest?: (target: { type: "node" | "gateway"; id: number; name: string }) => void;
 }
 
 export const Map3D: React.FC<Map3DProps> = ({
@@ -30,23 +38,32 @@ export const Map3D: React.FC<Map3DProps> = ({
   telemetries,
   risks,
   gateways,
+  fireSpread,
   activeFireNodeId,
   windDirection,
   windSpeed,
-  showWindLayer,
+  showWindLayer = false,
+  showWindParticles = true,
+  showGatewayCoverage = true,
+  showStationVectors = false,
   cameraFocus,
   selectedStationId,
   selectedGatewayId,
+  adminMode = "none",
   onSelectStation,
   onSelectGateway,
+  onMapClick,
+  onDeleteRequest,
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
+  const [activeMap, setActiveMap] = useState<MapLibreMap | null>(null);
 
   // React Marker Portalları için DOM container haritaları
   const stationContainersRef = useRef<Map<number, HTMLDivElement>>(new Map());
   const gatewayContainersRef = useRef<Map<number, HTMLDivElement>>(new Map());
   const [markersReady, setMarkersReady] = useState(false);
+  const [, setMarkerRevision] = useState(0);
 
   // 1. Haritayı ve 3D Terrain'i İlklendir
   useEffect(() => {
@@ -107,30 +124,9 @@ export const Map3D: React.FC<Map3DProps> = ({
       mapRef.current = map;
 
       // 1. Gateway LoRaWAN Kapsama Alanları (Draped GeoJSON)
-      const gatewayPolygons = gateways.map((gw) => {
-        const points = 32;
-        const coords: [number, number][] = [];
-        const radiusDegLat = gw.radiusMeters / 111320;
-        const radiusDegLng = gw.radiusMeters / (111320 * Math.cos((gw.lat * Math.PI) / 180));
-
-        for (let i = 0; i <= points; i++) {
-          const theta = (i * 2 * Math.PI) / points;
-          coords.push([
-            gw.lng + radiusDegLng * Math.cos(theta),
-            gw.lat + radiusDegLat * Math.sin(theta),
-          ]);
-        }
-
-        return {
-          type: "Feature" as const,
-          properties: { name: gw.name },
-          geometry: { type: "Polygon" as const, coordinates: [coords] },
-        };
-      });
-
       map.addSource("gateways-coverage", {
         type: "geojson",
-        data: { type: "FeatureCollection", features: gatewayPolygons },
+        data: { type: "FeatureCollection", features: [] },
       });
 
       map.addLayer({
@@ -166,8 +162,8 @@ export const Map3D: React.FC<Map3DProps> = ({
         type: "fill",
         source: "fire-spread-cone",
         paint: {
-          "fill-color": "#ef4444",
-          "fill-opacity": 0.28,
+          "fill-color": ["coalesce", ["get", "color"], "#ef4444"],
+          "fill-opacity": ["coalesce", ["get", "opacity"], 0.28],
         },
       });
 
@@ -176,8 +172,8 @@ export const Map3D: React.FC<Map3DProps> = ({
         type: "line",
         source: "fire-spread-cone",
         paint: {
-          "line-color": "#dc2626",
-          "line-width": 2,
+          "line-color": ["coalesce", ["get", "color"], "#dc2626"],
+          "line-width": 1.5,
           "line-opacity": 0.85,
         },
       });
@@ -220,27 +216,55 @@ export const Map3D: React.FC<Map3DProps> = ({
         },
       });
 
-      // 5. HTML DOM Gateway Marker Container'ları
-      for (const gw of gateways) {
-        const el = document.createElement("div");
-        el.className = "gateway-marker-root select-none pointer-events-auto";
-        new maplibregl.Marker({ element: el }).setLngLat([gw.lng, gw.lat]).addTo(map);
-        gatewayContainersRef.current.set(gw.id, el);
-      }
-
       setMarkersReady(true);
+      setActiveMap(map);
     });
 
     return () => {
       map.remove();
       mapRef.current = null;
+      setActiveMap(null);
     };
-  }, [gateways]);
+  }, []);
 
-  // İstasyonlar dinamik olarak geldiğinde Marker'ları senkronize et
+  // Harita Tıklama ve Admin Cursor Yönetimi
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const clickHandler = (e: maplibregl.MapMouseEvent) => {
+      onMapClick?.({ lat: e.lngLat.lat, lng: e.lngLat.lng });
+    };
+
+    map.on("click", clickHandler);
+    const canvas = map.getCanvas();
+    if (adminMode === "add_node" || adminMode === "add_gateway") {
+      canvas.style.cursor = "crosshair";
+    } else if (adminMode === "delete") {
+      canvas.style.cursor = "pointer";
+    } else {
+      canvas.style.cursor = "";
+    }
+
+    return () => {
+      map.off("click", clickHandler);
+    };
+  }, [adminMode, onMapClick]);
+
+  // İstasyonlar dinamik olarak değiştiğinde Marker'ları senkronize et (Ekleme / Silme)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !markersReady) return;
+
+    let hasChanges = false;
+    const currentStationIds = new Set(stations.map((s) => s.id));
+    for (const [id, el] of stationContainersRef.current.entries()) {
+      if (!currentStationIds.has(id)) {
+        el.remove();
+        stationContainersRef.current.delete(id);
+        hasChanges = true;
+      }
+    }
 
     for (const st of stations) {
       if (!stationContainersRef.current.has(st.id)) {
@@ -248,11 +272,86 @@ export const Map3D: React.FC<Map3DProps> = ({
         el.className = "station-marker-root select-none pointer-events-auto";
         new maplibregl.Marker({ element: el }).setLngLat([st.lng, st.lat]).addTo(map);
         stationContainersRef.current.set(st.id, el);
+        hasChanges = true;
       }
+    }
+
+    if (hasChanges) {
+      setMarkerRevision((r) => r + 1);
     }
   }, [stations, markersReady]);
 
-  // 2. Yangın Yayılım Konisini Güncelle
+  // Gateway Kapsama Çevrelerini ve Marker'ları Güncelle
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !markersReady) return;
+
+    const source = map.getSource("gateways-coverage") as maplibregl.GeoJSONSource | undefined;
+    if (source) {
+      const gatewayPolygons = gateways.map((gw) => {
+        const points = 32;
+        const coords: [number, number][] = [];
+        const radiusDegLat = gw.radiusMeters / 111320;
+        const radiusDegLng = gw.radiusMeters / (111320 * Math.cos((gw.lat * Math.PI) / 180));
+
+        for (let i = 0; i <= points; i++) {
+          const theta = (i * 2 * Math.PI) / points;
+          coords.push([
+            gw.lng + radiusDegLng * Math.cos(theta),
+            gw.lat + radiusDegLat * Math.sin(theta),
+          ]);
+        }
+
+        return {
+          type: "Feature" as const,
+          properties: { name: gw.name },
+          geometry: { type: "Polygon" as const, coordinates: [coords] },
+        };
+      });
+      source.setData({ type: "FeatureCollection", features: gatewayPolygons });
+    }
+
+    if (map.getLayer("gateways-coverage-fill")) {
+      map.setLayoutProperty(
+        "gateways-coverage-fill",
+        "visibility",
+        showGatewayCoverage ? "visible" : "none",
+      );
+    }
+    if (map.getLayer("gateways-coverage-line")) {
+      map.setLayoutProperty(
+        "gateways-coverage-line",
+        "visibility",
+        showGatewayCoverage ? "visible" : "none",
+      );
+    }
+
+    // Marker DOM container'larını senkronize et
+    let hasChanges = false;
+    const currentGwIds = new Set(gateways.map((g) => g.id));
+    for (const [id, el] of gatewayContainersRef.current.entries()) {
+      if (!currentGwIds.has(id)) {
+        el.remove();
+        gatewayContainersRef.current.delete(id);
+        hasChanges = true;
+      }
+    }
+    for (const gw of gateways) {
+      if (!gatewayContainersRef.current.has(gw.id)) {
+        const el = document.createElement("div");
+        el.className = "gateway-marker-root select-none pointer-events-auto";
+        new maplibregl.Marker({ element: el }).setLngLat([gw.lng, gw.lat]).addTo(map);
+        gatewayContainersRef.current.set(gw.id, el);
+        hasChanges = true;
+      }
+    }
+
+    if (hasChanges) {
+      setMarkerRevision((r) => r + 1);
+    }
+  }, [gateways, markersReady, showGatewayCoverage]);
+
+  // 2. Yangın Yayılım Konisini Güncelle (3B Rothermel / Huygens Çoklu Horizon)
   useEffect(() => {
     const map = mapRef.current;
     if (!map?.isStyleLoaded()) return;
@@ -262,27 +361,51 @@ export const Map3D: React.FC<Map3DProps> = ({
 
     if (!coneSource || !windSource) return;
 
-    if (!activeFireNodeId) {
+    const targetNodeId = fireSpread?.activeFireNodeId ?? activeFireNodeId;
+
+    if (!targetNodeId) {
       coneSource.setData({ type: "FeatureCollection", features: [] });
       windSource.setData({ type: "FeatureCollection", features: [] });
       return;
     }
 
-    const fireStation = stations.find((s) => s.id === activeFireNodeId);
+    const fireStation = stations.find((s) => s.id === targetNodeId);
     if (!fireStation) return;
 
-    // Huygens elips poligonu üret
-    const coneFeature = generateHuygensSpreadPolygon(
-      fireStation.lat,
-      fireStation.lng,
-      windDirection,
-      windSpeed,
-      25,
-    );
-    coneSource.setData({ type: "FeatureCollection", features: [coneFeature] });
+    // Eğer backend'den hesaplanmış Rothermel çoklu zonları geldiyse onları çiz:
+    // (Büyük zonlar altta, küçük zonlar üstte kalsın diye azalan sıralama: 60m -> 30m -> 15m)
+    if (fireSpread?.zones && fireSpread.zones.length > 0) {
+      const sortedZones = [...fireSpread.zones].sort((a, b) => b.horizonMin - a.horizonMin);
+      const features = sortedZones.map((zone) => ({
+        type: "Feature" as const,
+        properties: {
+          horizonMin: zone.horizonMin,
+          level: zone.level,
+          color: zone.color,
+          opacity: zone.horizonMin === 15 ? 0.35 : zone.horizonMin === 30 ? 0.22 : 0.12,
+          areaHectares: zone.areaHectares,
+        },
+        geometry: {
+          type: "Polygon" as const,
+          coordinates: [zone.polygon],
+        },
+      }));
+      coneSource.setData({ type: "FeatureCollection", features });
+    } else {
+      // Geriye dönük istemci taraflı elips üretimi
+      const coneFeature = generateHuygensSpreadPolygon(
+        fireStation.lat,
+        fireStation.lng,
+        windDirection,
+        windSpeed,
+        25,
+      );
+      coneSource.setData({ type: "FeatureCollection", features: [coneFeature] });
+    }
 
     // Rüzgâr yön çizgisi
-    const rad = ((90 - windDirection) * Math.PI) / 180;
+    const effectiveWindDir = fireSpread?.windDirectionDeg ?? windDirection;
+    const rad = ((90 - effectiveWindDir) * Math.PI) / 180;
     const arrowLenMeters = 1800;
     const endLng =
       fireStation.lng +
@@ -305,7 +428,7 @@ export const Map3D: React.FC<Map3DProps> = ({
         },
       ],
     });
-  }, [activeFireNodeId, windDirection, windSpeed, stations]);
+  }, [activeFireNodeId, fireSpread, windDirection, windSpeed, stations]);
 
   // 3. Tüm İstasyonların 3D Rüzgâr Vektörlerini Güncelle ve Göster/Gizle
   useEffect(() => {
@@ -315,7 +438,8 @@ export const Map3D: React.FC<Map3DProps> = ({
     const windSource = map.getSource("all-stations-wind") as maplibregl.GeoJSONSource | undefined;
     if (!windSource) return;
 
-    if (!showWindLayer) {
+    const isVisible = showStationVectors || showWindLayer;
+    if (!isVisible) {
       map.setLayoutProperty("all-stations-wind-line", "visibility", "none");
       return;
     }
@@ -337,7 +461,7 @@ export const Map3D: React.FC<Map3DProps> = ({
       type: "FeatureCollection",
       features,
     });
-  }, [showWindLayer, stations, telemetries, windDirection, windSpeed]);
+  }, [showStationVectors, showWindLayer, stations, telemetries, windDirection, windSpeed]);
 
   // 4. Kamera Odaklanma (Sinematik Geçiş)
   useEffect(() => {
@@ -356,6 +480,17 @@ export const Map3D: React.FC<Map3DProps> = ({
 
   return (
     <div ref={mapContainer} className="absolute inset-0 w-full h-full bg-zinc-950">
+      {/* 4. Rüzgâr Parçacık Akış Katmanı (Windy Streamline Canvas) */}
+      <WindParticleLayer
+        map={activeMap}
+        stations={stations}
+        telemetries={telemetries}
+        regionalWindDirection={windDirection}
+        regionalWindSpeed={windSpeed}
+        activeFireNodeId={activeFireNodeId}
+        visible={Boolean(showWindParticles)}
+      />
+
       {/* 5. React DOM Markers */}
       {markersReady && (
         <>
@@ -366,6 +501,7 @@ export const Map3D: React.FC<Map3DProps> = ({
 
             const rsk = risks.get(st.id);
             const isSelected = st.id === selectedStationId;
+            const isCovered = isStationCovered(st.lat, st.lng, gateways);
             const riskLevel = rsk?.level ?? "green";
             const isFire = riskLevel === "red";
             const isSmoldering = riskLevel === "yellow";
@@ -376,29 +512,35 @@ export const Map3D: React.FC<Map3DProps> = ({
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onSelectStation(st.id);
+                  if (adminMode === "delete") {
+                    onDeleteRequest?.({ type: "node", id: st.id, name: st.name });
+                  } else {
+                    onSelectStation(st.id);
+                  }
                 }}
-                className={`group relative flex flex-col items-center -translate-x-1/2 -translate-y-1/2 transition-transform duration-200 cursor-pointer focus:outline-none ${
-                  isSelected ? "scale-150 z-30" : "hover:scale-125 z-10"
+                className={`group relative flex flex-col items-center -translate-x-1/2 -translate-y-1/2 cursor-pointer focus:outline-none ${
+                  isSelected ? "z-30" : "z-10"
                 }`}
               >
                 {/* Siber-Fiziksel İstasyon Düğümü (Node İkonu) */}
                 <div
-                  className={`relative flex items-center justify-center w-6 h-6 rounded-full transition-all duration-300 ${
-                    isFire
-                      ? "bg-red-950/90 border border-red-500 shadow-[0_0_12px_rgba(239,68,68,0.7)]"
-                      : isSmoldering
-                        ? "bg-amber-950/90 border border-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.6)]"
-                        : st.source === "wokwi"
-                          ? "bg-sky-950/90 border border-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.5)]"
-                          : "bg-zinc-950/90 border border-emerald-500/70 shadow-[0_0_6px_rgba(16,185,129,0.3)]"
+                  className={`relative flex items-center justify-center w-6 h-6 rounded-full transition-all duration-200 ${
+                    !isCovered
+                      ? "bg-zinc-950 border-2 border-dashed border-zinc-600 text-zinc-500 opacity-80"
+                      : isFire
+                        ? "bg-rose-950 border-2 border-rose-500 text-rose-200"
+                        : isSmoldering
+                          ? "bg-amber-950 border-2 border-amber-500 text-amber-200"
+                          : st.source === "wokwi"
+                            ? "bg-sky-950 border-2 border-sky-400 text-sky-200"
+                            : "bg-zinc-950 border border-emerald-500/80 text-emerald-400"
                   } ${isSelected ? "ring-2 ring-emerald-400 ring-offset-2 ring-offset-zinc-950" : ""}`}
                 >
                   {/* Düğüm Dış Radar Dalgaları */}
                   {(isFire || isSmoldering) && (
                     <span
-                      className={`absolute inset-0 rounded-full animate-ping opacity-75 ${
-                        isFire ? "bg-red-500" : "bg-amber-500"
+                      className={`absolute inset-0 rounded-full animate-ping opacity-60 ${
+                        isFire ? "bg-rose-500" : "bg-amber-500"
                       }`}
                     />
                   )}
@@ -412,24 +554,31 @@ export const Map3D: React.FC<Map3DProps> = ({
                   {/* LED Sensör Çekirdeği */}
                   <span
                     className={`w-2 h-2 rounded-full transition-colors duration-200 ${
-                      isFire
-                        ? "bg-red-500 shadow-[0_0_6px_#ef4444]"
-                        : isSmoldering
-                          ? "bg-amber-400 shadow-[0_0_6px_#f59e0b]"
-                          : st.source === "wokwi"
-                            ? "bg-sky-400 shadow-[0_0_6px_#38bdf8]"
-                            : "bg-emerald-400 shadow-[0_0_4px_#10b981]"
+                      !isCovered
+                        ? "bg-zinc-500"
+                        : isFire
+                          ? "bg-rose-500"
+                          : isSmoldering
+                            ? "bg-amber-400"
+                            : st.source === "wokwi"
+                              ? "bg-sky-400"
+                              : "bg-emerald-400"
                     }`}
                   />
                 </div>
 
                 {/* İstasyon Numarası Etiketi */}
-                <span className="mt-1 px-1.5 py-0.5 bg-zinc-950/95 border border-zinc-700/90 rounded-sm text-xs font-mono font-bold text-zinc-100 shadow-md flex items-center gap-1 whitespace-nowrap">
+                <span className="mt-1 px-1.5 py-0.5 bg-zinc-950 border border-zinc-700 rounded text-xs font-mono font-bold text-zinc-100 shadow-sm flex items-center gap-1 whitespace-nowrap">
                   <span>#{st.id}</span>
                   {st.source === "wokwi" && (
                     <span className="text-[10px] text-sky-400 font-semibold">[WOKWI]</span>
                   )}
                 </span>
+                {!isCovered && (
+                  <span className="mt-0.5 px-1 py-0.2 bg-zinc-900 border border-dashed border-zinc-600 rounded text-[9px] font-mono font-bold text-zinc-400 whitespace-nowrap tracking-wider shadow-sm">
+                    KAPSAMA DIŞI
+                  </span>
+                )}
               </button>,
               container,
             );
@@ -448,15 +597,19 @@ export const Map3D: React.FC<Map3DProps> = ({
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onSelectGateway(gw.id);
+                  if (adminMode === "delete") {
+                    onDeleteRequest?.({ type: "gateway", id: gw.id, name: gw.name });
+                  } else {
+                    onSelectGateway(gw.id);
+                  }
                 }}
-                className={`group relative flex flex-col items-center -translate-x-1/2 -translate-y-1/2 transition-transform duration-200 cursor-pointer focus:outline-none ${
-                  isSelected ? "scale-150 z-30" : "hover:scale-125 z-20"
+                className={`group relative flex flex-col items-center -translate-x-1/2 -translate-y-1/2 cursor-pointer focus:outline-none ${
+                  isSelected ? "z-30" : "z-20"
                 }`}
               >
                 {/* Kule / Yayın İkonu */}
                 <div
-                  className={`relative flex items-center justify-center w-7 h-7 rounded-full bg-zinc-950/95 border border-sky-400 text-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.5)] transition-all duration-300 ${
+                  className={`relative flex items-center justify-center w-7 h-7 rounded-full bg-zinc-950 border border-sky-400 text-sky-400 shadow-md transition-all duration-200 ${
                     isSelected ? "ring-2 ring-sky-300 ring-offset-2 ring-offset-zinc-950" : ""
                   }`}
                 >
@@ -464,7 +617,7 @@ export const Map3D: React.FC<Map3DProps> = ({
                   <span className="absolute inset-0 rounded-full animate-ping opacity-35 bg-sky-400" />
                 </div>
 
-                <span className="mt-1 px-1.5 py-0.5 bg-zinc-950/95 border border-sky-800/90 rounded-sm text-xs font-mono font-bold text-sky-300 shadow-md flex items-center gap-1.5 whitespace-nowrap">
+                <span className="mt-1 px-1.5 py-0.5 bg-zinc-950 border border-sky-800 rounded text-xs font-mono font-bold text-sky-300 shadow-sm flex items-center gap-1.5 whitespace-nowrap">
                   <span>GW-0{gw.id}</span>
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                 </span>
@@ -477,3 +630,15 @@ export const Map3D: React.FC<Map3DProps> = ({
     </div>
   );
 };
+
+function isStationCovered(lat: number, lng: number, gws: readonly GatewayInfo[]): boolean {
+  if (gws.length === 0) return false;
+  for (const gw of gws) {
+    const dLat = (lat - gw.lat) * 111320;
+    const avgLatRad = (((lat + gw.lat) / 2) * Math.PI) / 180;
+    const dLng = (lng - gw.lng) * 111320 * Math.cos(avgLatRad);
+    const dist = Math.sqrt(dLat * dLat + dLng * dLng);
+    if (dist <= gw.radiusMeters) return true;
+  }
+  return false;
+}

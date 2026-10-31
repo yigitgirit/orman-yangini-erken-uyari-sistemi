@@ -23,7 +23,9 @@ call "%~dp0_kontrol.cmd" || goto :hata
 ping -n 3 127.0.0.1 >nul
 %RUN% "PyrosEco Backend" /D "%ROOT%" cmd /k pnpm dev:backend
 ping -n 5 127.0.0.1 >nul
-%RUN% "PyrosEco MQTT - dugum 50" cmd /k ""%MOSQUITTO_DIR%\mosquitto_sub.exe" -h localhost -t sensors/50/telemetry -v"
+rem MQTT dinleyici backend'in salt-okur hesabiyla baglanir (sifre .env'den)
+for /f "usebackq tokens=1,* delims==" %%a in ("%ROOT%\.env") do if "%%a"=="MQTT_BACKEND_PASSWORD" set "MQTT_BACKEND_PASSWORD=%%b"
+%RUN% "PyrosEco MQTT - dugum 50" cmd /k ""%MOSQUITTO_DIR%\mosquitto_sub.exe" -h localhost -u backend -P %MQTT_BACKEND_PASSWORD% -t sensors/50/telemetry -v"
 %RUN% "PyrosEco Izleme" /D "%ROOT%" cmd /k "mode con: cols=120 lines=40 && pnpm dev:monitor"
 
 echo.
