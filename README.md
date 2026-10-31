@@ -1,121 +1,130 @@
 # PyrosEco 🌲🔥
 
-> **Orman Yangını Erken Uyarı ve Siber-Fiziksel Operasyon Sistemi**  
-> Yangınları alevler yükselmeden önce — henüz piroliz ve için için yanma evresinde — çok sensörlü gaz füzyonu, kriptografik LoRaWAN protokolü ve 3B topografik Rothermel yayılım modeliyle tespit eden yeni nesil erken uyarı platformu.
+> **Orman Yangını Erken Uyarı ve Siber-Fiziksel Operasyon Platformu**  
+> Yangınları alevler yükselmeden önce — piroliz ve için için yanma evresinde — çoklu sensör füzyonu, kriptografik LoRaWAN protokolü ve 3B topografik yangın yayılım modellemesiyle tespit eden izleme ve operasyon sistemi.
 
 ---
 
 ## 🏛️ Sistem Mimarisi
 
 ```text
-┌─────────────────────────────────┐
-│     Saha Sensör Düğümleri       │
-│  (49 Simüle Düğüm + ESP32/Wokwi)│
-└────────────────┬────────────────┘
-                 │  PyrosFrame v3 (AES-128-CCM, 29 Bayt, UDP :5005)
-                 ▼
-┌─────────────────────────────────┐
-│        LoRaWAN Gateway          │
-│   (Mühür Doğrulama & Replay)    │
-└────────────────┬────────────────┘
-                 │  Kilitli MQTT (sensors/{id}/telemetry, ACL Korumalı)
-                 ▼
-┌─────────────────────────────────┐
-│     Çekirdek Analiz Motoru      │
-│ (VPD, EWMA, MCE, Rothermel 3D)  │
-└───────┬─────────────────┬───────┘
-        │                 │
-        │ SQLite (WAL)    │ WebSocket TLS (:8080)
-        ▼                 ▼
-┌──────────────┐  ┌────────────────────────────────────────┐
-│  pyros.db    │  │       3B Web Operasyon Merkezi         │
-│  (Arşiv)     │  │ (MapLibre 3D, Rüzgâr Motoru, TanStack) │
-└──────────────┘  └────────────────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│            Saha Sensör Düğümleri             │
+│    (Sanal Düğümler + ESP32 Donanım/Wokwi)    │
+└──────────────────────┬───────────────────────┘
+                       │  PyrosFrame v3 (AES-128-CCM, 29 Bayt, UDP)
+                       ▼
+┌──────────────────────────────────────────────┐
+│               LoRaWAN Gateway                │
+│    (Kriptografik Mühür Doğrulama & Replay)   │
+└──────────────────────┬───────────────────────┘
+                       │  Yetkilendirilmiş MQTT (ACL Korumalı)
+                       ▼
+┌──────────────────────────────────────────────┐
+│            Çekirdek Analiz Motoru            │
+│ (Füzyon, EWMA Tabanı, VPD, Rothermel Yayılım) │
+└──────────────┬────────────────┬──────────────┘
+               │                │
+ SQLite (WAL)  ▼                ▼  WebSocket TLS
+      ┌────────────────┐  ┌────────────────────────────────────────┐
+      │    pyros.db    │  │       3B Web Operasyon Merkezi         │
+      │ (Telemetriler) │  │ (MapLibre 3D, Rüzgâr Motoru, TanStack) │
+      └────────────────┘  └────────────────────────────────────────┘
 ```
 
 ---
 
-## ✨ Temel Özellikler
+## 🛠️ Kullanılan Teknolojiler
 
-* **🔥 Erken Piroliz ve Çoklu Sensör Füzyonu:** BME688, SGP40, MQ-7 ve SPS30 sensör verilerini birleştirerek alev oluşmadan 5-15 dakika önce gaz anomalilerini yakalar.
-* **🌡️ Fiziksel İndisler ve Anomali Analizi:**
-  * **Vapor Pressure Deficit (VPD):** Yaprak ve örtü kuruluk derecesini ölçerek parlama yatkınlığını hesaplar.
-  * **İvme ($\Delta^2/\Delta t^2$):** Sıcaklık ve $\text{CO}_2$ artış hızının türevini alarak anlık alevlenme (*flashover*) riskini sezer.
-  * **4'lü Sinyal Matrisi:** Erken gaz, karbonmonoksit, duman ve termal sinyalleri bağımsız doğrular.
-  * **Çapraz Komşu Teyidi:** 300m etki alanındaki istasyonlarla çapraz doğrulama yaparak yanlış alarmları önler.
-* **🗺️ 3B Topografik Operasyon Haritası:** Marmaris Balan Dağı & Bördübet arazisinde 50 stratejik istasyon; MapLibre GL 3D ve yükseklik modeli.
-* **📐 Rothermel & Huygens Yangın Yayılım Modeli:** Rüzgâr yönü ve arazi eğimine göre 15, 30 ve 60 dakikalık eliptik yayılım konturlarını ve tahliye zonlarını hesaplar.
-* **💨 60 FPS Rüzgâr Parçacık Motoru:** Gerçek zamanlı meteorolojik rüzgâr akış çizgilerini $O(1)$ örnekleme ile kasmadan 3B harita üzerinde canlandırır.
-* **🔐 Uçtan Uca Donanımsal Güvenlik (PyrosFrame v3):**
-  * AES-128-CCM mühürlü 29 baytlık kompakt paket yapısı ile LoRa ToA süresini ~48 ms'ye indirir (3+ yıl pil ömrü).
-  * HMAC-SHA256 türetilmiş düğüm anahtarları ve monotonik sayaç koruması (Replay Attack engelleme).
-  * Kilitli Mosquitto broker (sadece gateway yazar, backend okur).
-* **📋 TanStack Table Tarihsel Veritabanı Arşivi:** SQLite üzerinde saklanan 60.000+ telemetri kaydı için sunucu taraflı sayfalandırma, filtreleme, sıralama ve CSV dışa aktarma (tamamen shadcn/ui bileşenleri ile).
-* **⚙️ Yönetici Operasyon Paneli:** Harita üzerinde interaktif yeni istasyon/gateway ekleme, kapsama alanı analizi ve dinamik topoloji yönetimi.
+| Katman | Teknoloji / Kütüphaneler |
+| :--- | :--- |
+| **Gömülü Sistem & Simülasyon** | ESP32, C++ (PlatformIO), Wokwi, `mbedtls` (AES-128-CCM), Node.js UDP |
+| **Haberleşme & Mesajlaşma** | LoRaWAN ikili protokolü (PyrosFrame v3), Mosquitto MQTT (ACL kilitli), TLS WebSocket |
+| **Backend & Analitik** | Node.js 24 (`node:sqlite`), Zod, Rothermel & Huygens Yangın Yayılım Fiziği |
+| **Frontend & Görselleştirme** | React 19, TypeScript, Vite, Tailwind CSS, MapLibre GL 3D, Recharts |
+| **UI & Veri Tablosu** | TanStack Table v8, shadcn/ui, Radix UI Primitives, Lucide Icons |
 
 ---
 
-## ⚡ Hızlı Başlangıç
+## ✨ Temel Yetenekler
+
+* **Çok Sensörlü Gaz Füzyonu:** Sıcaklık, bağıl nem, CO gazı, VOC endeksi, $\text{CO}_2$ ve partikül duman (PM2.5) verilerini birleştirerek termal alev öncesi erken anomali tespiti.
+* **Fiziksel İndisler ve Anomali Analizi:**
+  * **Buhar Basıncı Açığı (VPD):** Ortam sıcaklığı ve neminden orman örtüsünün kuruluk ve tutuşma potansiyeli hesabı.
+  * **İvme ($\Delta^2/\Delta t^2$):** Sıcaklık ve gaz artış hızının ikinci türeviyle ani alevlenme (*flashover*) tespiti.
+  * **4'lü Sinyal Matrisi:** Erken gaz, karbonmonoksit, duman ve yanma sinyallerinin bağımsız doğrulanması.
+  * **Çapraz Komşu Teyidi:** Yangın başlangıç noktası etrafındaki komşu istasyonlarla çapraz teyit mekanizması.
+* **3B Topografik Operasyon Haritası:** Sayısal yükseklik modeli ve harita katmanları üzerinde istasyonlar, kuleler ve yayılım alanları.
+* **Rothermel Yangın Yayılım Modeli:** Rüzgâr yönü, hamle hızı ve arazi eğimine bağlı 15, 30 ve 60 dakikalık eliptik yayılım tahmin konturları.
+* **Akışkan Rüzgâr Parçacık Katmanı:** Vektör alanı üzerinde meteorolojik rüzgâr akış çizgilerinin 3B harita animasyonu.
+* **Protokol ve Paket Güvenliği:**
+  * AES-128-CCM mühürlü 29 baytlık kompakt ikili paket yapısı.
+  * Düğüm bazlı HMAC-SHA256 anahtar türetimi ve sayaç tabanlı tekrar saldırısı (Replay Attack) koruması.
+  * Kilitli MQTT erişim kontrol listesi (ACL).
+* **Tarihsel Telemetri Arşivi:** SQLite üzerinde saklanan telemetriler için sunucu taraflı sayfalandırma, filtreleme, çift yönlü sıralama ve CSV dışa aktarma (TanStack Table & shadcn/ui).
+* **Yönetici Paneli:** Canlı harita üzerinde düğüm ve gateway ekleme/silme, kapsama alanı yarıçap analizi ve topoloji yönetimi.
+
+---
+
+## ⚡ Kurulum ve Çalıştırma
 
 ### Gereksinimler
 * **Node.js** 24+
 * **pnpm** 10+
 * **Docker** (Mosquitto MQTT broker için)
 
-### 1. Kurulum ve Ortam Hazırlığı
+### 1. Hazırlık
 ```bash
 # Bağımlılıkları yükleyin
 pnpm install
 
-# .env dosyasını oluşturun
+# Çevre değişkenleri şablonunu kopyalayın
 cp .env.example .env
 
-# MQTT şifrelerini ve AES-128-CCM anahtarlarını üretin
+# MQTT servis kullanıcılarını ve AES-128-CCM anahtarını üretin
 pnpm mqtt:users
 pnpm keys
 
-# Topoloji ve veritabanı tohumlarını ilklendirin
+# Topoloji ve veritabanını ilklendirin
 pnpm db:seed
 ```
 
-### 2. Sistemi Başlatma
+### 2. Başlatma
 ```bash
-# 1. Kilitli MQTT Broker'ı başlatın
+# 1. Mosquitto MQTT Broker'ı Docker ile arka planda başlatın
 pnpm broker:up
 
 # 2. Tüm servisleri (Gateway, Backend, Simülatör ve Web) tek komutla çalıştırın
 pnpm dev:all
 ```
+
 * **Web Arayüzü:** `http://localhost:5173`
-* **WebSocket TLS:** `wss://localhost:8080`
-* **Gateway UDP:** `127.0.0.1:5005`
+* **Backend WebSocket:** `wss://localhost:8080`
+* **Gateway UDP Dinleyicisi:** `127.0.0.1:5005`
 
 ---
 
-## 🎯 Canlı Yangın Senaryoları
+## 🎯 Test Senaryoları
 
-Sistem çalışırken farklı yangın tiplerini test etmek için dinamik senaryo yöneticisini kullanabilirsiniz:
+Sistem çalışırken farklı yangın senaryolarını test etmek için:
 
 ```bash
-# İnteraktif senaryo menüsü
+# Dinamik senaryo enjektörü
 pnpm senaryo
-
-# Belirli bir düğümde yangın başlatma
-FIRE_NODE=25 FIRE_SPEED=2 pnpm dev:sensor
 ```
-
-* **Standart Orman Yangını:** Düğüm #25 (Merkez Trafo) — Piroliz, için için yanma ve alevli evreler.
-* **Sinsi Piknik / İhmal Ateşi:** Düşük ısı, yoğun CO ve duman emisyonu.
-* **Kuru Fırtına / Hızlı Alevlenme:** Şiddetli poyraz hamleleriyle hızlı rüzgâr altı yayılım.
-* **Yalancı Pozitif (False Alarm):** Sadece tekil gaz sıçraması (komşu teyidi olmadan alarm tetiklenmez).
 
 ---
 
-## 🛠️ Monorepo Yapısı
+## 📁 Proje Dizin Yapısı
 
-* **`apps/web`**: React 19, Vite, Tailwind CSS, MapLibre GL 3D, TanStack Table, shadcn/ui.
-* **`apps/backend`**: Node.js, `ws`, `node:sqlite`, Rothermel yayılım motoru, sensör füzyon analizi.
-* **`apps/gateway`**: LoRaWAN UDP dinleyicisi, AES-128-CCM doğrulama, MQTT yayıncısı.
-* **`apps/sensor-sim`**: 49 düğümlü dijital ikiz, mikro-meteorolojik rüzgâr ve yayılım simülatörü.
-* **`firmware`**: Gerçek ESP32 / Wokwi simülasyonu için PlatformIO C++ firmware kodu (`mbedtls` CCM).
-* **`packages/shared`**: Ortak Zod şemaları, PyrosFrame ikili protokolü, SQLite veritabanı sürücüsü ve tipler.
+```text
+├── apps/
+│   ├── web/          # React 19 + MapLibre 3D + TanStack Table arayüzü
+│   ├── backend/      # Çekirdek analiz motoru, Rothermel fiziği ve SQLite sürücüsü
+│   ├── gateway/      # UDP -> MQTT paket doğrulama ve kriptografik filtre servisi
+│   └── sensor-sim/   # Çoklu düğüm telemetri ve rüzgâr simülatörü
+├── packages/
+│   └── shared/       # Zod şemaları, PyrosFrame ikili protokolü, veri tabanı ve tipler
+├── firmware/         # ESP32 C++ PlatformIO donanım kodu
+└── scripts/          # Anahtar üretimi, MQTT ACL ve senaryo araçları
+```
