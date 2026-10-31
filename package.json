@@ -19,6 +19,7 @@
     "dev:gateway": "pnpm --filter @pyros/gateway dev",
     "dev:backend": "pnpm --filter @pyros/backend dev",
     "dev:web": "pnpm --filter @pyros/web dev",
+    "dev:monitor": "pnpm --filter @pyros/backend monitor",
     "dev:all": "pnpm --parallel --filter @pyros/* dev",
     "typecheck": "pnpm -r typecheck",
     "lint": "biome lint .",
