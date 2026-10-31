@@ -113,6 +113,53 @@ socket.on("message", (buf) => {
   }
 });
 
+// Dışarıdan (ör. "pnpm senaryo") gelen dinamik UDP kontrol mesajlarını dinle
+socket.on("message", (buf) => {
+  try {
+    const raw = buf.toString("utf8");
+    if (!raw.startsWith("{")) return;
+    const cmd = JSON.parse(raw);
+
+    if (cmd.cmd === "SET_SCENARIO") {
+      fireNode = getNode(Number(cmd.nodeId ?? 11));
+      fireDelayS = Number(cmd.delayS ?? 5);
+      fireSpeed = Number(cmd.speed ?? 1);
+      activeScenarioType = cmd.scenarioType ?? "standard";
+      activeScenarioName = cmd.name ?? `Düğüm #${cmd.nodeId} Yangını`;
+      startedAt = Date.now();
+
+      if (cmd.wind) {
+        WIND_MEAN.speed = cmd.wind.speed;
+        WIND_MEAN.fromDeg = cmd.wind.fromDeg;
+        WIND.speed = cmd.wind.speed;
+        WIND.fromDeg = cmd.wind.fromDeg;
+        baseSpeed = cmd.wind.speed;
+      }
+
+      console.log(`\n================================================================`);
+      console.log(`🔥 [sensor-sim] CANLI YANGIN SENARYOSU DEVREYE ALINDI!`);
+      console.log(`   Senaryo          : ${activeScenarioName}`);
+      console.log(`   Başlangıç Noktası: Düğüm #${fireNode?.id} (${fireNode?.name})`);
+      console.log(`   Karakteristik    : ${activeScenarioType}`);
+      console.log(`   Zaman Katsayısı  : ${fireSpeed}x (Gecikme: ${fireDelayS} sn)`);
+      console.log(`   Rüzgâr           : ${WIND_MEAN.fromDeg}° azimut, ${WIND_MEAN.speed.toFixed(1)} m/s`);
+      console.log(`================================================================\n`);
+    } else if (cmd.cmd === "RESET") {
+      fireNode = undefined;
+      startedAt = Date.now();
+      activeScenarioName = "Taban İzleme (Yangın Yok)";
+      activeScenarioType = "standard";
+      for (const s of states) {
+        s.mode = NodeMode.Normal;
+        s.lastAnomalyAt = 0;
+      }
+      console.log(`\n🌿 [sensor-sim] SENARYO SIFIRLANDI: Yangın söndürüldü, tüm düğümler normal moda döndü.\n`);
+    }
+  } catch {
+    // JSON dışı paketleri yoksay
+  }
+});
+
 // --- Canli ruzgar modeli (Manavgat Poyraz Ruzgari) ----------------------------
 // 28 Temmuz 2021 Manavgat yangininda etkili olan sert ve kuru Kuzey-Kuzeydogu Poyrazi (30°).
 // Ortalama 7.2 m/s hizinda eser, arazi kanyonlarinda hamleler (gust) 12-14 m/s'ye ulasir.
@@ -213,6 +260,48 @@ function sourceEmission(t: number) {
   if (activeScenarioType === "false_alarm") {
     // Dışarıdan anız/ilaç dumanı: Gaz yükselir ama ısı 0, alev yok
     const pulse = Math.exp(-(((t - 1) / 1.2) ** 2)); // 1-2 dk tepe yapıp söner
+    return {
+      voc: 180 * pulse,
+      co: 18 * pulse,
+      co2: 90 * pulse,
+      pm25: 75 * pulse,
+      heat: 0,
+      dry: 0,
+    };
+  }
+
+  // Varsayılan: Manavgat Kanyonu standart 3 evreli yangın modeli
+
+  if (activeScenarioType === "smoldering") {
+    // Sinsi Piknik / İhmal Ateşi: Yüksek CO ve duman, MCE ~0.78, ısı neredeyse yok
+    const smold = Math.min(t / 2, 1);
+    const co = 36 * smold;
+    return {
+      voc: 140 * smold,
+      co,
+      co2: 3.4 * co, // Düşük MCE (~0.77)
+      pm25: 390 * smold,
+      heat: 1.5 * smold, // Isı artışı neredeyse sıfır
+      dry: 2 * smold,
+    };
+  }
+
+  if (activeScenarioType === "flashover") {
+    // Ani Trafo / Enerji Hattı Parlaması: Piroliz atlanır, doğrudan alev ve ısı patlar
+    const flame = Math.min(t / 0.4, 1); // 24 saniyede zirve alev
+    return {
+      voc: 70 * flame,
+      co: 22 * flame,
+      co2: 3400 * flame, // Yüksek MCE (>0.96)
+      pm25: 600 * flame,
+      heat: 58 * flame, // Anında +58°C
+      dry: 10 * flame,
+    };
+  }
+
+  if (activeScenarioType === "false_alarm") {
+    // Dışarıdan anız/ilaç dumanı: Gaz yükselir ama ısı 0, alev yok
+    const pulse = Math.exp(-Math.pow((t - 1) / 1.2, 2)); // 1-2 dk tepe yapıp söner
     return {
       voc: 180 * pulse,
       co: 18 * pulse,
