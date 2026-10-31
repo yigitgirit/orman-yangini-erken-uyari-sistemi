@@ -39,11 +39,10 @@ export class LiveWebSocketClient {
   private url: string;
 
   private constructor() {
-    // TLS wss:// öncelikli bağlantı URL'i
-    const defaultProto = window.location.protocol === "https:" ? "wss:" : "wss:";
-    const host = window.location.hostname || "localhost";
-    const port = import.meta.env.VITE_WS_PORT ?? "8080";
-    this.url = import.meta.env.VITE_WS_URL ?? `${defaultProto}//${host}:${port}`;
+    // Varsayılan: sayfanın kendi sunucusu üzerinden /ws (vite.config.ts backend'e wss ile aktarır).
+    // Tarayıcı backend'in kendinden imzalı sertifikasını görmez; sertifika onayı gerekmez.
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    this.url = import.meta.env.VITE_WS_URL ?? `${proto}//${window.location.host}/ws`;
   }
 
   public static getInstance(): LiveWebSocketClient {
