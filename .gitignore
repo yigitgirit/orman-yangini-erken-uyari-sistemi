@@ -28,5 +28,15 @@ mosquitto/config/passwd
 firmware/include/node_key.h
 apps/gateway/.sayaclar.json
 
+# Yerel SQLite veritabani ve topoloji
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
 # Surec PID dosyalari
 .pids/
+
+# Dokumantasyon ve yerel notlar
+docs/

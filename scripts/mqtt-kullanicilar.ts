@@ -38,11 +38,15 @@ const lines = USERS.map(({ username, envKey }) => {
 
 if (added.length > 0) {
   const prefix = envText === "" || envText.endsWith("\n") ? "" : "\n";
-  appendFileSync(
-    envPath,
-    `${prefix}\n# MQTT broker şifreleri (pnpm mqtt:users üretti)\n${added.join("\n")}\n`,
-  );
-  console.log(`[mqtt] .env dosyasına ${added.length} yeni şifre eklendi`);
+  try {
+    appendFileSync(
+      envPath,
+      `${prefix}\n# MQTT broker şifreleri (pnpm mqtt:users üretti)\n${added.join("\n")}\n`,
+    );
+    console.log(`[mqtt] .env dosyasına ${added.length} yeni şifre eklendi`);
+  } catch (_e) {
+    console.warn("[mqtt] .env dosyasına yazılamadı, lütfen elle ekleyin:", added.join(", "));
+  }
 }
 
 writeFileSync(passwdPath, `${lines.join("\n")}\n`);

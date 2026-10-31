@@ -12,10 +12,10 @@ import {
   MQTT_CREDENTIALS,
   MQTT_TOPICS,
   MQTT_URL,
-  NODES,
   type TelemetryMessage,
   UDP_PORT,
 } from "@pyros/shared";
+import { getAllGateways, getAllNodes, isNodeInCoverage } from "@pyros/shared/db";
 import {
   deriveNodeKey,
   FrameRejected,
@@ -27,7 +27,20 @@ import {
 import mqtt from "mqtt";
 
 const masterKey = loadMasterKey();
-const nodeKeys = new Map(NODES.map((n) => [n.id, deriveNodeKey(masterKey, n.id)]));
+
+let cachedNodes = getAllNodes();
+let cachedGateways = getAllGateways();
+let lastCacheRefresh = Date.now();
+
+function getCachedTopology() {
+  const now = Date.now();
+  if (now - lastCacheRefresh > 1500) {
+    cachedNodes = getAllNodes();
+    cachedGateways = getAllGateways();
+    lastCacheRefresh = now;
+  }
+  return { nodes: cachedNodes, gateways: cachedGateways };
+}
 
 // Tekrar korumasi: her dugumun kabul edilen son sayaci. Gateway yeniden baslasa da eski
 // paketler kabul edilmesin diye dosyada tutulur.
@@ -79,13 +92,29 @@ setInterval(() => {
 
 function verify(msg: Buffer) {
   const { nodeId } = peekHeader(msg);
-  const key = nodeKeys.get(nodeId);
-  if (!key) throw new FrameRejected(RejectReason.UnknownNode, `dugum ${nodeId} kayitli degil`);
+  const { nodes, gateways } = getCachedTopology();
+  const node = nodes.find((n) => n.id === nodeId);
+  if (!node) {
+    throw new FrameRejected(
+      RejectReason.UnknownNode,
+      `düğüm ${nodeId} kayıtlı değil veya silinmiş`,
+    );
+  }
+
+  const { covered } = isNodeInCoverage(node.lat, node.lng, gateways);
+  if (!covered) {
+    throw new FrameRejected(
+      RejectReason.UnknownNode,
+      `düğüm ${nodeId} kapsama dışı (hiçbir gateway menzilinde değil)`,
+    );
+  }
+
+  const key = deriveNodeKey(masterKey, nodeId);
   const { frame, counter } = openFrame(msg, key);
-  // Sayac yalnizca muhur dogrulandiktan sonra kontrol edilir: sahte paket sayaci ilerletemez
+  // Sayaç yalnızca mühür doğrulandıktan sonra kontrol edilir
   const last = lastCounter.get(nodeId) ?? -1;
   if (counter <= last) {
-    throw new FrameRejected(RejectReason.Replay, `dugum ${nodeId} sayac ${counter} <= son ${last}`);
+    throw new FrameRejected(RejectReason.Replay, `düğüm ${nodeId} sayaç ${counter} <= son ${last}`);
   }
   lastCounter.set(nodeId, counter);
   countersDirty = true;

@@ -7,7 +7,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./env": "./src/env.ts",
-    "./secure": "./src/secure.ts"
+    "./secure": "./src/secure.ts",
+    "./db": "./src/db.ts"
   },
   "scripts": {
     "typecheck": "tsc"

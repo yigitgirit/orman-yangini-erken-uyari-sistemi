@@ -14,7 +14,7 @@ export const OfflineBanner: React.FC<OfflineBannerProps> = ({ status, isMockMode
 
   return (
     <div className="absolute top-14 left-1/2 -translate-x-1/2 z-40 max-w-md w-[calc(100vw-2rem)] select-none pointer-events-none">
-      <div className="bg-zinc-950/95 border border-amber-900/60 rounded-xl px-4 py-3 shadow-2xl shadow-black/80 flex items-start gap-3 backdrop-blur-md">
+      <div className="bg-zinc-950 border border-amber-800/80 rounded-xl px-4 py-3 shadow-xl flex items-start gap-3">
         <div className="p-2 rounded-lg bg-amber-950/40 border border-amber-800/50 shrink-0 mt-0.5">
           <WifiOff className="h-4 w-4 text-amber-400" />
         </div>

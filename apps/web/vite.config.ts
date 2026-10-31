@@ -10,7 +10,11 @@ export default defineConfig(({ mode }) => {
   // Tarayıcı backend'e Vite üzerinden (/ws) bağlanır: tarayıcılar kendinden imzalı sertifikalı
   // wss:// bağlantısını sessizce reddeder. Backend'e TLS bağlantısını Vite (Node) kurar.
   const backendWs = `${env.USE_TLS === "false" ? "ws" : "wss"}://localhost:${env.WS_PORT ?? "8080"}`;
-  const proxy = { "/ws": { target: backendWs, ws: true, secure: false, changeOrigin: true } };
+  const backendHttp = `${env.USE_TLS === "false" ? "http" : "https"}://localhost:${env.WS_PORT ?? "8080"}`;
+  const proxy = {
+    "/ws": { target: backendWs, ws: true, secure: false, changeOrigin: true },
+    "/api": { target: backendHttp, secure: false, changeOrigin: true },
+  };
 
   return {
     plugins: [react()],

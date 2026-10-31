@@ -131,6 +131,25 @@ export const GatewayInfoSchema = z.object({
   backhaul: z.string(),
 });
 
+/** 3B Rothermel/Huygens yangın yayılım tahmini zonu (15, 30, 60 dk) */
+export const FireSpreadZoneSchema = z.object({
+  horizonMin: z.number().int(),
+  level: z.enum(["evacuate", "containment", "threat"]),
+  color: z.string(),
+  areaHectares: z.number(),
+  forwardDistanceM: z.number(),
+  polygon: z.array(z.tuple([z.number(), z.number()])), // [lng, lat] GeoJSON koordinat çiftleri
+});
+
+/** Yangın yayılım tahmini genel paketi */
+export const FireSpreadPredictionSchema = z.object({
+  activeFireNodeId: z.number().int(),
+  generatedAt: z.string(),
+  windSpeed: z.number(),
+  windDirectionDeg: z.number(),
+  zones: z.array(FireSpreadZoneSchema).readonly(),
+});
+
 /** Backend -> Web WebSocket yayın mesajları */
 export const WsMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("nodes"), data: z.array(SensorNodeSchema).readonly() }),
@@ -139,10 +158,87 @@ export const WsMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("risk"), data: NodeRiskSchema }),
   z.object({ type: z.literal("impact"), data: ImpactSummarySchema }),
   z.object({ type: z.literal("wind"), data: WindFieldSchema }),
+  z.object({ type: z.literal("fire_spread"), data: FireSpreadPredictionSchema.nullable() }),
+  z.object({
+    type: z.literal("admin_auth_result"),
+    data: z.object({
+      success: z.boolean(),
+      token: z.string().optional(),
+      error: z.string().optional(),
+    }),
+  }),
+  z.object({
+    type: z.literal("admin_action_result"),
+    data: z.object({
+      success: z.boolean(),
+      action: z.string(),
+      message: z.string(),
+    }),
+  }),
+  z.object({
+    type: z.literal("archive_result"),
+    data: z.object({
+      queryId: z.string().optional(),
+      rows: z.array(z.any()),
+      totalCount: z.number(),
+      page: z.number(),
+      pageSize: z.number(),
+    }),
+  }),
 ]);
 
 /** Web -> Backend istemci komutları */
 export const WsCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("trigger_fire"), nodeId: z.number().int() }),
   z.object({ type: z.literal("extinguish_fire") }),
+  z.object({
+    type: z.literal("query_archive"),
+    queryId: z.string().optional(),
+    filter: z
+      .object({
+        nodeId: z.number().optional(),
+        startDate: z.string().optional(),
+        endDate: z.string().optional(),
+        limit: z.number().optional(),
+        offset: z.number().optional(),
+        sortBy: z.string().optional(),
+        sortOrder: z.enum(["asc", "desc"]).optional(),
+      })
+      .optional(),
+  }),
+  z.object({
+    type: z.literal("admin_login"),
+    username: z.string(),
+    password: z.string(),
+  }),
+  z.object({
+    type: z.literal("admin_create_node"),
+    token: z.string(),
+    name: z.string().min(1),
+    lat: z.number(),
+    lng: z.number(),
+    hasAnemometer: z.boolean(),
+  }),
+  z.object({
+    type: z.literal("admin_delete_node"),
+    token: z.string(),
+    nodeId: z.number().int(),
+  }),
+  z.object({
+    type: z.literal("admin_create_gateway"),
+    token: z.string(),
+    name: z.string().min(1),
+    lat: z.number(),
+    lng: z.number(),
+    radiusMeters: z.number().positive(),
+  }),
+  z.object({
+    type: z.literal("admin_delete_gateway"),
+    token: z.string(),
+    gatewayId: z.number().int(),
+  }),
+  z.object({
+    type: z.literal("admin_reset_defaults"),
+    token: z.string(),
+  }),
 ]);

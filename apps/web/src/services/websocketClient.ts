@@ -1,4 +1,5 @@
 import {
+  type FireSpreadPrediction,
   type GatewayInfo,
   type ImpactSummary,
   type NodeRisk,
@@ -19,6 +20,17 @@ type TelemetryListener = (telemetry: TelemetryMessage) => void;
 type RiskListener = (risk: NodeRisk) => void;
 type ImpactListener = (impact: ImpactSummary) => void;
 type WindListener = (wind: WindField) => void;
+type FireSpreadListener = (spread: FireSpreadPrediction | null) => void;
+type AdminAuthListener = (data: { success: boolean; token?: string; error?: string }) => void;
+type AdminActionListener = (data: { success: boolean; action: string; message: string }) => void;
+export interface ArchiveResultData {
+  queryId?: string;
+  rows: unknown[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+type ArchiveListener = (data: ArchiveResultData) => void;
 
 export class LiveWebSocketClient {
   private static instance: LiveWebSocketClient | null = null;
@@ -35,6 +47,10 @@ export class LiveWebSocketClient {
   private riskListeners = new Set<RiskListener>();
   private impactListeners = new Set<ImpactListener>();
   private windListeners = new Set<WindListener>();
+  private fireSpreadListeners = new Set<FireSpreadListener>();
+  private adminAuthListeners = new Set<AdminAuthListener>();
+  private adminActionListeners = new Set<AdminActionListener>();
+  private archiveListeners = new Set<ArchiveListener>();
 
   private url: string;
 
@@ -91,6 +107,18 @@ export class LiveWebSocketClient {
               break;
             case "wind":
               for (const l of this.windListeners) l(msg.data);
+              break;
+            case "fire_spread":
+              for (const l of this.fireSpreadListeners) l(msg.data);
+              break;
+            case "admin_auth_result":
+              for (const l of this.adminAuthListeners) l(msg.data);
+              break;
+            case "admin_action_result":
+              for (const l of this.adminActionListeners) l(msg.data);
+              break;
+            case "archive_result":
+              for (const l of this.archiveListeners) l(msg.data);
               break;
           }
         } catch (err) {
@@ -184,6 +212,26 @@ export class LiveWebSocketClient {
   public onWind(l: WindListener): () => void {
     this.windListeners.add(l);
     return () => this.windListeners.delete(l);
+  }
+
+  public onFireSpread(l: FireSpreadListener): () => void {
+    this.fireSpreadListeners.add(l);
+    return () => this.fireSpreadListeners.delete(l);
+  }
+
+  public onAdminAuth(l: AdminAuthListener): () => void {
+    this.adminAuthListeners.add(l);
+    return () => this.adminAuthListeners.delete(l);
+  }
+
+  public onAdminAction(l: AdminActionListener): () => void {
+    this.adminActionListeners.add(l);
+    return () => this.adminActionListeners.delete(l);
+  }
+
+  public onArchiveResult(l: ArchiveListener): () => void {
+    this.archiveListeners.add(l);
+    return () => this.archiveListeners.delete(l);
   }
 
   public disconnect(): void {

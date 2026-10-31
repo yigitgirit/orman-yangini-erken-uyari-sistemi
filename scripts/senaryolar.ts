@@ -36,17 +36,17 @@ export interface FireScenario {
 export const SCENARIOS: FireScenario[] = [
   {
     id: "1",
-    shortKey: "manavgat",
-    category: "GERÇEK YAŞANMIŞ SENARYO (28 Temmuz 2021)",
-    name: "Manavgat Kanyonu Poyraz Fırtınası (Büyük Tepe Yangını)",
+    shortKey: "marmaris",
+    category: "GERÇEK YAŞANMIŞ EGE SENARYOSU (2021-2022)",
+    name: "Marmaris Balan Dağı Meltem Fırtınası (Büyük Tepe Yangını)",
     nodeId: 11,
-    nodeName: "B4 (Oymapınar Kanyon Girişi)",
+    nodeName: "B4 (Balan Dağı Rüzgâr Boğazı)",
     scenarioType: "standard",
-    speed: 2,
-    delayS: 3,
-    wind: { speed: 8.5, fromDeg: 30 },
+    speed: 6,
+    delayS: 1,
+    wind: { speed: 8.5, fromDeg: 335 },
     description:
-      "28 Temmuz 2021 Manavgat Yangını modeli. Sert Kuzeydoğu Poyrazı (30°, 8.5 m/s) ile hızla güneybatıya ilerler. Piroliz (0-2 dk) -> Tütme/Smoldering (2-5 dk) -> Tepe Alevi (5+ dk) üçlü evresi.",
+      "Marmaris Balan Dağı yangın modeli. Sert Kuzeybatı Meltemi (335°, 8.5 m/s) ile hızla vadilere ilerler. Piroliz (0-10 sn) -> Tütme/Smoldering (10-25 sn) -> Tepe Alevi (25+ sn) üçlü evresi.",
     expectedOutcome:
       "Düğüm 11'de VOC erken gaz alarmı -> Düğüm 18 & 25'e duman taşınımı -> Komşu doğrulamasıyla Kırmızı Alarm (Alevli Yangın).",
   },
@@ -56,10 +56,10 @@ export const SCENARIOS: FireScenario[] = [
     category: "İNSAN İHMALİ / SİNSİ ÖRTÜ ALTI YANGINI",
     name: "Vadi Tabanı Piknik / Kamp Ateşi İhmali (Sinsi Tütme)",
     nodeId: 43,
-    nodeName: "G1 (Güneybatı Vadi Tabanı)",
+    nodeName: "G3 (Vadi Tabanı Piknik & Kamp Alanı)",
     scenarioType: "smoldering",
-    speed: 2,
-    delayS: 2,
+    speed: 4,
+    delayS: 1,
     wind: { speed: 2.2, fromDeg: 220 },
     description:
       "Közlerin günlerce örtü altında tütmesi modeli. Çok yüksek CO (35+ ppm), yüksek PM2.5, düşük MCE (~0.77). Sıcaklık artışı neredeyse hiç yoktur; kameralar alev görmez.",
@@ -72,15 +72,15 @@ export const SCENARIOS: FireScenario[] = [
     category: "ALTYAPI KAZASI / FLASH-OVER",
     name: "Yüksek Gerilim Hattı / Trafo Kıvılcımı (Ani Parlama)",
     nodeId: 25,
-    nodeName: "D4 (Sahanın Tam Merkezi)",
+    nodeName: "D4 (Merkez Trafo & Enerji Nakil)",
     scenarioType: "flashover",
-    speed: 3,
-    delayS: 2,
+    speed: 5,
+    delayS: 1,
     wind: { speed: 5.5, fromDeg: 270 },
     description:
       "Piroliz ve tütme evresi atlanır. Kuru ot ve çalılar saniyeler içinde parlar. +58°C ani sıcaklık artışı, CO2 > 3500 ppm, yüksek MCE (>0.96).",
     expectedOutcome:
-      "30 saniyede doğrudan Kırmızı Alarm ('Alevli Yanma'). Anlık ısı ve CO2 türevi tavan yapar.",
+      "15 saniyede doğrudan Kırmızı Alarm ('Alevli Yanma'). Anlık ısı ve CO2 türevi tavan yapar.",
   },
   {
     id: "4",
@@ -88,10 +88,10 @@ export const SCENARIOS: FireScenario[] = [
     category: "SAHTE ALARM TESTİ (FALSE-POSITIVE DAYANIKLILIK)",
     name: "Tarla Anız / İlaçlama Dumanı (Yanıltıcı Dış Etki)",
     nodeId: 1,
-    nodeName: "A1 (Kuzeybatı Sınır Noktası)",
+    nodeName: "A1 (Kuzeybatı Tarım Sınırı)",
     scenarioType: "false_alarm",
-    speed: 1.5,
-    delayS: 2,
+    speed: 4,
+    delayS: 1,
     wind: { speed: 3.5, fromDeg: 120 },
     description:
       "Orman dışından rüzgârla tek bir sensöre gelen yabancı gaz/duman bulutu. Isı artışı yoktur. Rüzgâr yönündeki komşu sensörlere duman taşınmaz.",
@@ -104,27 +104,50 @@ export const SCENARIOS: FireScenario[] = [
     category: "DONANIM ETKİLEŞİMLİ TEST (WOKWI HİBRİT)",
     name: "Wokwi ESP32 Düğümüne Duman Taşıma (#50 Hibrit)",
     nodeId: 35,
-    nodeName: "E7 (Doğu Sınır Komşusu)",
+    nodeName: "E7 (Zirve Batı Yamacı - Wokwi Komşusu)",
     scenarioType: "standard",
-    speed: 2,
-    delayS: 3,
+    speed: 5,
+    delayS: 1,
     wind: { speed: 6.5, fromDeg: 270 },
     description:
-      "7x7 ızgaranın doğu ucunda (Düğüm 35) yangın başlar. Batı rüzgârı (270°) dumanı doğudaki Oymapınar Seyir Wokwi ESP32 donanımına (Düğüm 50) üfler.",
+      "Balan Dağı batı yamacında (Düğüm 35) yangın başlar. Batı rüzgârı (270°) dumanı doğudaki Balan Dağı Zirve Wokwi ESP32 donanımına (Düğüm 50) üfler.",
     expectedOutcome:
       "Simüle düğüm 35'te yangın başlar; Wokwi simülatöründe potansiyometreleri çevirerek donanımın yangını nasıl doğruladığını ve komşu teyidini canlı izleyebilirsiniz.",
   },
 ];
 
-function sendCommand(payload: object): Promise<void> {
+function sendCommand(payload: object): Promise<{ status: string; [key: string]: unknown }> {
   return new Promise((resolve, reject) => {
     const socket = dgram.createSocket("udp4");
     const buf = Buffer.from(JSON.stringify(payload), "utf8");
 
+    const timer = setTimeout(() => {
+      try {
+        socket.close();
+      } catch {}
+      reject(new Error("TIMED_OUT"));
+    }, 1500);
+
+    socket.on("message", (msg) => {
+      clearTimeout(timer);
+      try {
+        const res = JSON.parse(msg.toString("utf8"));
+        socket.close();
+        resolve(res);
+      } catch {
+        socket.close();
+        resolve({ status: "ok" });
+      }
+    });
+
     socket.send(buf, SIM_CONTROL_PORT, SIM_CONTROL_HOST, (err) => {
-      socket.close();
-      if (err) reject(err);
-      else resolve();
+      if (err) {
+        clearTimeout(timer);
+        try {
+          socket.close();
+        } catch {}
+        reject(err);
+      }
     });
   });
 }
@@ -148,13 +171,19 @@ async function triggerScenario(s: FireScenario) {
       wind: s.wind,
       name: s.name,
     });
-    console.log(`✅ BAŞARILI: Senaryo komutu sensor-sim (:5006) sürecine iletildi!`);
+    console.log(`✅ BAŞARILI: sensor-sim (:5006) komutu onayladı ve devreye aldı!`);
     console.log(
       `👀 Şimdi Web Arayüzünü (http://localhost:5173) veya Terminal İzleyicisini (pnpm dev:monitor) izleyin.\n`,
     );
   } catch (_err) {
-    console.error(`❌ HATA: sensor-sim sürecine bağlanılamadı!`);
-    console.error(`   Lütfen başka bir terminalde "pnpm dev:sensor" çalıştığından emin olun.\n`);
+    console.error(`❌ HATA: sensor-sim (:5006) sürecine bağlanılamadı veya yanıt alınamadı!`);
+    console.error(`   Olası Nedenler:`);
+    console.error(
+      `   1. Sensör simülatörü çalışmıyor olabilir -> Terminalde "pnpm dev:sensor" çalıştırın.`,
+    );
+    console.error(
+      `   2. Tüm sistemi tek komutla başlatmak için -> "pnpm dev:all" kullanabilirsiniz.\n`,
+    );
   }
 }
 
@@ -164,7 +193,7 @@ async function resetScenario() {
     await sendCommand({ cmd: "RESET" });
     console.log(`✅ BAŞARILI: Yangın söndürüldü, tüm istasyonlar normal stabil duruma döndü.\n`);
   } catch (_err) {
-    console.error(`❌ HATA: sensor-sim sürecine bağlanılamadı!\n`);
+    console.error(`❌ HATA: sensor-sim (:5006) sürecine bağlanılamadı!\n`);
   }
 }
 

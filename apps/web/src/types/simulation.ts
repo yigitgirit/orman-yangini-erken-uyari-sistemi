@@ -6,7 +6,7 @@ export interface SensorStation {
   lat: number;
   lng: number;
   elevation: number; // Rakim (metre)
-  isHardware?: boolean; // Wokwi donanim dugumu rozeti (Dugum 31)
+  isHardware?: boolean; // Wokwi donanim dugumu rozeti (Dugum 50)
 }
 
 export interface GatewayInfo {

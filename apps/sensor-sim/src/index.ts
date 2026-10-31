@@ -23,7 +23,6 @@ import {
   bearingDeg,
   distanceM,
   getNode,
-  NODES,
   NodeMode,
   NodeSource,
   type PyrosFrame,
@@ -34,6 +33,7 @@ import {
   UDP_HOST,
   UDP_PORT,
 } from "@pyros/shared";
+import { getAllNodes } from "@pyros/shared/db";
 import { counterBase, deriveNodeKey, loadMasterKey, sealFrame } from "@pyros/shared/secure";
 
 const socket = dgram.createSocket("udp4");
@@ -63,19 +63,28 @@ let activeScenarioName = process.env.FIRE_NODE
 let startedAt = Date.now();
 
 // Dışarıdan (ör. "pnpm senaryo") gelen dinamik UDP kontrol mesajlarını dinle
-socket.on("message", (buf) => {
+socket.on("message", (buf, rinfo) => {
   try {
     const raw = buf.toString("utf8");
     if (!raw.startsWith("{")) return;
     const cmd = JSON.parse(raw);
 
     if (cmd.cmd === "SET_SCENARIO") {
-      fireNode = getNode(Number(cmd.nodeId ?? 11));
-      fireDelayS = Number(cmd.delayS ?? 5);
-      fireSpeed = Number(cmd.speed ?? 1);
+      const targetId = Number(cmd.nodeId ?? 11);
+      fireNode = states.find((s) => s.node.id === targetId)?.node ?? getNode(targetId);
+      fireDelayS = Number(cmd.delayS ?? 2);
+      fireSpeed = Number(cmd.speed ?? 4);
       activeScenarioType = cmd.scenarioType ?? "standard";
       activeScenarioName = cmd.name ?? `Düğüm #${cmd.nodeId} Yangını`;
       startedAt = Date.now();
+
+      // Yangın başlangıç düğümünün ve yakın komşuların paket gönderimini derhal başlat
+      const now = Date.now();
+      for (const s of states) {
+        if (s.node.id === targetId || (fireNode && distanceM(s.node, fireNode) < 300)) {
+          s.nextSendAt = now;
+        }
+      }
 
       if (cmd.wind) {
         WIND_MEAN.speed = cmd.wind.speed;
@@ -95,6 +104,15 @@ socket.on("message", (buf) => {
         `   Rüzgâr           : ${WIND_MEAN.fromDeg}° azimut, ${WIND_MEAN.speed.toFixed(1)} m/s`,
       );
       console.log(`================================================================\n`);
+
+      // Göndericiye (senaryolar.ts) onay paketi ilet
+      if (rinfo?.port) {
+        const ack = Buffer.from(
+          JSON.stringify({ status: "ok", scenario: activeScenarioName, nodeId: fireNode?.id }),
+          "utf8",
+        );
+        socket.send(ack, rinfo.port, rinfo.address);
+      }
     } else if (cmd.cmd === "RESET") {
       fireNode = undefined;
       startedAt = Date.now();
@@ -107,63 +125,20 @@ socket.on("message", (buf) => {
       console.log(
         `\n🌿 [sensor-sim] SENARYO SIFIRLANDI: Yangın söndürüldü, tüm düğümler normal moda döndü.\n`,
       );
+
+      if (rinfo?.port) {
+        const ack = Buffer.from(JSON.stringify({ status: "reset_ok" }), "utf8");
+        socket.send(ack, rinfo.port, rinfo.address);
+      }
     }
   } catch {
     // JSON dışı paketleri yoksay
   }
 });
 
-// Dışarıdan (ör. "pnpm senaryo") gelen dinamik UDP kontrol mesajlarını dinle
-socket.on("message", (buf) => {
-  try {
-    const raw = buf.toString("utf8");
-    if (!raw.startsWith("{")) return;
-    const cmd = JSON.parse(raw);
-
-    if (cmd.cmd === "SET_SCENARIO") {
-      fireNode = getNode(Number(cmd.nodeId ?? 11));
-      fireDelayS = Number(cmd.delayS ?? 5);
-      fireSpeed = Number(cmd.speed ?? 1);
-      activeScenarioType = cmd.scenarioType ?? "standard";
-      activeScenarioName = cmd.name ?? `Düğüm #${cmd.nodeId} Yangını`;
-      startedAt = Date.now();
-
-      if (cmd.wind) {
-        WIND_MEAN.speed = cmd.wind.speed;
-        WIND_MEAN.fromDeg = cmd.wind.fromDeg;
-        WIND.speed = cmd.wind.speed;
-        WIND.fromDeg = cmd.wind.fromDeg;
-        baseSpeed = cmd.wind.speed;
-      }
-
-      console.log(`\n================================================================`);
-      console.log(`🔥 [sensor-sim] CANLI YANGIN SENARYOSU DEVREYE ALINDI!`);
-      console.log(`   Senaryo          : ${activeScenarioName}`);
-      console.log(`   Başlangıç Noktası: Düğüm #${fireNode?.id} (${fireNode?.name})`);
-      console.log(`   Karakteristik    : ${activeScenarioType}`);
-      console.log(`   Zaman Katsayısı  : ${fireSpeed}x (Gecikme: ${fireDelayS} sn)`);
-      console.log(`   Rüzgâr           : ${WIND_MEAN.fromDeg}° azimut, ${WIND_MEAN.speed.toFixed(1)} m/s`);
-      console.log(`================================================================\n`);
-    } else if (cmd.cmd === "RESET") {
-      fireNode = undefined;
-      startedAt = Date.now();
-      activeScenarioName = "Taban İzleme (Yangın Yok)";
-      activeScenarioType = "standard";
-      for (const s of states) {
-        s.mode = NodeMode.Normal;
-        s.lastAnomalyAt = 0;
-      }
-      console.log(`\n🌿 [sensor-sim] SENARYO SIFIRLANDI: Yangın söndürüldü, tüm düğümler normal moda döndü.\n`);
-    }
-  } catch {
-    // JSON dışı paketleri yoksay
-  }
-});
-
-// --- Canli ruzgar modeli (Manavgat Poyraz Ruzgari) ----------------------------
-// 28 Temmuz 2021 Manavgat yangininda etkili olan sert ve kuru Kuzey-Kuzeydogu Poyrazi (30°).
-// Ortalama 7.2 m/s hizinda eser, arazi kanyonlarinda hamleler (gust) 12-14 m/s'ye ulasir.
-const WIND_MEAN = { speed: 7.2, fromDeg: 30 };
+// --- Canlı rüzgâr modeli (Marmaris Balan Dağı Meltem Rüzgârı) ------------------
+// Ege kıyılarında etkili olan Kuzeybatı Meltemi (335° NNW), 7.4 m/s ortalama hız
+const WIND_MEAN = { speed: 7.4, fromDeg: 335 };
 const WIND = { speed: WIND_MEAN.speed, fromDeg: WIND_MEAN.fromDeg };
 let baseSpeed = WIND_MEAN.speed;
 let gust = 0;
@@ -207,24 +182,51 @@ interface NodeState {
 const rand = (n: number) => (Math.random() - 0.5) * n;
 const masterKey = loadMasterKey();
 
-const states: NodeState[] = NODES.filter((n) => n.source === NodeSource.Sim).map((node) => ({
-  node,
-  base: {
-    temperature: 39 + rand(2), // Manavgat Temmuz kavurucu yaz tabani
-    humidity: 12 + rand(3), // Kritik kuru hava (%10-15)
-    co: 0.2 + rand(0.1),
-    co2: 418 + rand(8),
-    vocIndex: 90 + rand(10),
-    pm25: 10 + rand(4),
-  },
-  terrain: { dirOffset: rand(30), speedFactor: 0.85 + Math.random() * 0.4 },
-  battery: 75 + Math.random() * 25,
-  mode: NodeMode.Normal,
-  lastAnomalyAt: 0,
-  nextSendAt: Date.now() + Math.random() * SENSOR_INTERVAL_MS.normal, // gonderimleri dagit
-  key: deriveNodeKey(masterKey, node.id),
-  counter: 0,
-}));
+function createNodeState(node: SensorNode): NodeState {
+  return {
+    node,
+    base: {
+      temperature: 39 + rand(2), // Manavgat Temmuz kavurucu yaz tabanı
+      humidity: 12 + rand(3), // Kritik kuru hava (%10-15)
+      co: 0.2 + rand(0.1),
+      co2: 418 + rand(8),
+      vocIndex: 90 + rand(10),
+      pm25: 10 + rand(4),
+    },
+    terrain: { dirOffset: rand(30), speedFactor: 0.85 + Math.random() * 0.4 },
+    battery: 75 + Math.random() * 25,
+    mode: NodeMode.Normal,
+    lastAnomalyAt: 0,
+    nextSendAt: Date.now() + Math.random() * SENSOR_INTERVAL_MS.normal, // gönderimleri dağıt
+    key: deriveNodeKey(masterKey, node.id),
+    counter: 0,
+  };
+}
+
+const states: NodeState[] = getAllNodes()
+  .filter((n) => n.source === NodeSource.Sim)
+  .map(createNodeState);
+
+function syncSimulationNodes() {
+  const currentNodes = getAllNodes().filter((n) => n.source === NodeSource.Sim);
+  const currentIds = new Set(currentNodes.map((n) => n.id));
+
+  // Silinen düğümleri simülasyon listesinden çıkar
+  for (let i = states.length - 1; i >= 0; i--) {
+    if (!currentIds.has(states[i].node.id)) {
+      states.splice(i, 1);
+    }
+  }
+
+  // Yeni eklenen düğümleri simülasyon listesine dahil et
+  const existingIds = new Set(states.map((s) => s.node.id));
+  for (const node of currentNodes) {
+    if (!existingIds.has(node.id)) {
+      states.push(createNodeState(node));
+      console.log(`[sensor-sim] Yeni düğüm simülasyona dahil edildi: #${node.id} (${node.name})`);
+    }
+  }
+}
 
 /** Kaynaktaki emisyon profili (t: atesten beri gecen dakika) */
 function sourceEmission(t: number) {
@@ -260,48 +262,6 @@ function sourceEmission(t: number) {
   if (activeScenarioType === "false_alarm") {
     // Dışarıdan anız/ilaç dumanı: Gaz yükselir ama ısı 0, alev yok
     const pulse = Math.exp(-(((t - 1) / 1.2) ** 2)); // 1-2 dk tepe yapıp söner
-    return {
-      voc: 180 * pulse,
-      co: 18 * pulse,
-      co2: 90 * pulse,
-      pm25: 75 * pulse,
-      heat: 0,
-      dry: 0,
-    };
-  }
-
-  // Varsayılan: Manavgat Kanyonu standart 3 evreli yangın modeli
-
-  if (activeScenarioType === "smoldering") {
-    // Sinsi Piknik / İhmal Ateşi: Yüksek CO ve duman, MCE ~0.78, ısı neredeyse yok
-    const smold = Math.min(t / 2, 1);
-    const co = 36 * smold;
-    return {
-      voc: 140 * smold,
-      co,
-      co2: 3.4 * co, // Düşük MCE (~0.77)
-      pm25: 390 * smold,
-      heat: 1.5 * smold, // Isı artışı neredeyse sıfır
-      dry: 2 * smold,
-    };
-  }
-
-  if (activeScenarioType === "flashover") {
-    // Ani Trafo / Enerji Hattı Parlaması: Piroliz atlanır, doğrudan alev ve ısı patlar
-    const flame = Math.min(t / 0.4, 1); // 24 saniyede zirve alev
-    return {
-      voc: 70 * flame,
-      co: 22 * flame,
-      co2: 3400 * flame, // Yüksek MCE (>0.96)
-      pm25: 600 * flame,
-      heat: 58 * flame, // Anında +58°C
-      dry: 10 * flame,
-    };
-  }
-
-  if (activeScenarioType === "false_alarm") {
-    // Dışarıdan anız/ilaç dumanı: Gaz yükselir ama ısı 0, alev yok
-    const pulse = Math.exp(-Math.pow((t - 1) / 1.2, 2)); // 1-2 dk tepe yapıp söner
     return {
       voc: 180 * pulse,
       co: 18 * pulse,
@@ -386,12 +346,18 @@ function readSensor(s: NodeState, now: number): PyrosFrame {
 
 let lastTick = Date.now();
 let lastLog = Date.now();
+let lastSync = Date.now();
 let sent = 0;
 setInterval(() => {
   const now = Date.now();
   const dtS = (now - lastTick) / 1000;
   lastTick = now;
   updateWind(dtS);
+
+  if (now - lastSync >= 2000) {
+    syncSimulationNodes();
+    lastSync = now;
+  }
 
   for (const s of states) {
     if (s.battery <= 0) continue; // pili biten dugum susar

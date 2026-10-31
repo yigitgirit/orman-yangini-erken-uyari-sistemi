@@ -1,6 +1,8 @@
 // Uygulamalar arası JSON veri şemaları ve Zod tarafından türetilen tipler.
 import type { z } from "zod";
 import type {
+  FireSpreadPredictionSchema,
+  FireSpreadZoneSchema,
   FireStageSchema,
   GatewayInfoSchema,
   ImpactSummarySchema,
@@ -27,6 +29,8 @@ export type ImpactSummary = z.infer<typeof ImpactSummarySchema>;
 export type WindVector = z.infer<typeof WindVectorSchema>;
 export type NodeWind = z.infer<typeof NodeWindSchema>;
 export type WindField = z.infer<typeof WindFieldSchema>;
+export type FireSpreadZone = z.infer<typeof FireSpreadZoneSchema>;
+export type FireSpreadPrediction = z.infer<typeof FireSpreadPredictionSchema>;
 export type WsMessage = z.infer<typeof WsMessageSchema>;
 export type WsCommand = z.infer<typeof WsCommandSchema>;
 
